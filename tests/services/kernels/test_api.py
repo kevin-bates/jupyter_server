@@ -7,8 +7,6 @@ import tornado
 import urllib.parse
 from tornado.escape import url_escape
 
-from jupyter_client.kernelspec import NATIVE_KERNEL_NAME
-
 from jupyter_server.utils import url_path_join
 from ...utils import expected_http_error
 
@@ -72,7 +70,7 @@ async def test_main_kernel_handler(fetch):
         'api', 'kernels',
         method='POST',
         body=json.dumps({
-            'name': NATIVE_KERNEL_NAME
+            'name': 'pyimport/kernel'
         })
     )
     kernel1 = json.loads(r.body.decode())
@@ -104,7 +102,7 @@ async def test_main_kernel_handler(fetch):
         'api', 'kernels',
         method='POST',
         body=json.dumps({
-            'name': NATIVE_KERNEL_NAME
+            'name': 'pyimport/kernel'
         })
     )
     kernel2 = json.loads(r.body.decode())
@@ -145,7 +143,7 @@ async def test_kernel_handler(fetch):
         'api', 'kernels',
         method='POST',
         body=json.dumps({
-            'name': NATIVE_KERNEL_NAME
+            'name': 'pyimport/kernel'
         })
     )
     kernel_id = json.loads(r.body.decode())['id']
@@ -200,7 +198,7 @@ async def test_connection(fetch, ws_fetch, http_port, auth_header):
         'api', 'kernels',
         method='POST',
         body=json.dumps({
-            'name': NATIVE_KERNEL_NAME
+            'name': 'pyimport/kernel'
         })
     )
     kid = json.loads(r.body.decode())['id']
