@@ -42,6 +42,8 @@ class GatewayClient(SingletonConfigurable):
 
     @validate('url')
     def _url_validate(self, proposal):
+        if self.parent.server_mode != 'notebooks':
+            raise TraitError("GatewayClient url (--gateway-url) can only be specified when server-mode is 'notebooks'!")
         value = proposal['value']
         # Ensure value, if present, starts with 'http'
         if value is not None and len(value) > 0:

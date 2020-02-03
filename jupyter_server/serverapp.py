@@ -539,6 +539,7 @@ aliases.update({
     'browser': 'ServerApp.browser',
     'pylab': 'ServerApp.pylab',
     'gateway-url': 'GatewayClient.url',
+    'server-mode': 'ServerApp.server_mode',
 })
 
 #-----------------------------------------------------------------------------
@@ -1208,6 +1209,58 @@ class ServerApp(JupyterApp):
          is not available.
          """))
 
+    supported_server_modes = ('notebooks', 'kernels', 'contents')
+
+    server_mode = Unicode('notebooks', config=True,
+        help=_("The mode of the server.  Must be one of {}.".format(supported_server_modes))
+    )
+
+    @default('server_mode')
+    def _default_server_mode(self):
+        return 'notebooks'
+
+    @validate('server_mode')
+    def _valdate_server_mode(self, proposal):
+        value = proposal['value']
+        if value in ServerApp.supported_server_modes:
+            return value
+        raise TraitError(trans.gettext("The mode of the server must be one of {}.".
+                                       format(ServerApp.supported_server_modes)))
+
+    def is_serving_kernels(self):
+        return self.server_mode == 'notebooks' or self.server_mode == 'kernels'
+
+    def is_serving_contents(self):
+        return self.server_mode == 'notebooks' or self.server_mode == 'contents'
+
+    def get_services(self):
+
+        if self.server_mode == 'kernels':
+            return (
+                'api',
+                'auth',
+                'config',
+                'kernels',
+                'kernelspecs',
+                'security',
+                'shutdown',
+            )
+
+        if self.server_mode == 'contents':
+            return (
+                'api',
+                'auth',
+                'config',
+                'contents',
+                'edit',
+                'files',
+                'nbconvert',
+                'security',
+                'shutdown',
+                'view'
+            )
+        return ServerApp.default_services
+
     def parse_command_line(self, argv=None):
 
         super(ServerApp, self).parse_command_line(argv)
@@ -1301,7 +1354,7 @@ class ServerApp(JupyterApp):
             sys.exit(1)
 
         self.web_app = ServerWebApplication(
-            self, self.default_services, self.kernel_manager, self.contents_manager,
+            self, self.get_services(), self.kernel_manager, self.contents_manager,
             self.session_manager, self.kernel_spec_manager,
             self.config_manager, self.extra_services,
             self.log, self.base_url, self.default_url, self.tornado_settings,
@@ -1684,17 +1737,26 @@ class ServerApp(JupyterApp):
 
     def running_server_info(self, kernel_count=True):
         "Return the current working directory and the server url information"
-        info = self.contents_manager.info_string() + "\n"
+        info = ""
+        if self.is_serving_contents():
+            info += self.contents_manager.info_string() + "\n"
         if kernel_count:
             n_kernels = len(self.kernel_manager.list_kernel_ids())
             kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
             info += kernel_msg % n_kernels
             info += "\n"
         # Format the info so that the URL fits on a single line in 80 char display
-        info += _("Jupyter Server {version} is running at:\n{url}".
-                  format(version=ServerApp.version, url=self.display_url))
+        info += _("Jupyter Server {version} is serving {mode} at:\n{url}".
+                  format(version=ServerApp.version, mode=self.server_mode, url=self.display_url))
         if self.gateway_config.gateway_enabled:
             info += _("\nKernels will be managed by the Gateway server running at:\n%s") % self.gateway_config.url
+
+        kernels_clause = ""
+        if self.is_serving_kernels():
+            kernels_clause += "and shut down all kernels "
+        info += _("\nUse Control-C to stop this server {kernels_clause}(twice to skip confirmation).".
+                  format(kernels_clause=kernels_clause))
+
         return info
 
     def server_info(self):
@@ -1808,7 +1870,6 @@ class ServerApp(JupyterApp):
         info = self.log.info
         for line in self.running_server_info(kernel_count=False).split("\n"):
             info(line)
-        info(_("Use Control-C to stop this server and shut down all kernels (twice to skip confirmation)."))
         if 'dev' in jupyter_server.__version__:
             info(_("Welcome to Project Jupyter! Explore the various tools available"
                  " and their corresponding documentation. If you are interested"
