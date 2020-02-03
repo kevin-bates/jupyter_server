@@ -99,6 +99,7 @@ for more information.
     entry_points = {
         'console_scripts': [
             'jupyter-server = jupyter_server.serverapp:main',
+            'jupyter-kernel-server = jupyter_server.serverapp:ks_main',
             'jupyter-bundlerextension = jupyter_server.bundler.bundlerextensions:main',
         ],
         'pytest11': [
