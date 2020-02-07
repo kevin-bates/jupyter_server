@@ -15,7 +15,7 @@ from traitlets.config import Config
 
 from jupyter_core.application import JupyterApp
 
-from jupyter_server.serverapp import ServerApp, aliases, flags
+from jupyter_server.serverapp import ServerApp
 from jupyter_server.transutils import _
 from jupyter_server.utils import url_path_join
 from .handler import ExtensionHandler
@@ -23,7 +23,7 @@ from .handler import ExtensionHandler
 # Remove alias for nested classes in ServerApp.
 # Nested classes are not allowed in ExtensionApp.
 try:
-    aliases.pop('transport')
+    ServerApp.aliases.pop('transport')
 except KeyError:
     pass
 
@@ -124,7 +124,7 @@ class ExtensionAppJinjaMixin:
 # Aliases and Flags
 #-----------------------------------------------------------------------------
 
-flags['no-browser']=(
+ServerApp.flags['no-browser']=(
     {'ExtensionApp' : {'open_browser' : True}},
     _("Prevent the opening of the default url in the browser.")
 )
@@ -181,8 +181,8 @@ class ExtensionApp(JupyterApp):
         ServerApp,
     ]
 
-    aliases = aliases
-    flags = flags
+    aliases = ServerApp.aliases
+    flags = ServerApp.flags
 
     subcommands = {}
 

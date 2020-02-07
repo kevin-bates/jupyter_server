@@ -42,6 +42,7 @@ from jupyter_server.utils import secure_write
 # Install the pyzmq ioloop. This has to be done before anything else from
 # tornado is imported.
 from zmq.eventloop import ioloop
+
 ioloop.install()
 
 # check for tornado 3.1.0
@@ -53,7 +54,7 @@ try:
     version_info = tornado.version_info
 except AttributeError:
     raise ImportError(_("The Jupyter Server requires tornado >= 4.0, but you have < 1.1.0"))
-if version_info < (4,0):
+if version_info < (4, 0):
     raise ImportError(_("The Jupyter Server requires tornado >= 4.0, but you have %s") % tornado.version)
 
 from tornado import httpserver
@@ -66,7 +67,7 @@ from jupyter_server import (
     DEFAULT_TEMPLATE_PATH_LIST,
     __version__,
 )
-
+from .service_mixins import *
 from .base.handlers import MainHandler, RedirectWithParams, Template404
 from .log import log_request
 from .services.kernels.kernelmanager import MappingKernelManager
@@ -104,15 +105,9 @@ from .utils import url_path_join, check_pid, url_escape, urljoin, pathname2url
 
 from jupyter_server.extension.serverextension import ServerExtensionApp
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Module globals
-#-----------------------------------------------------------------------------
-
-_examples = """
-jupyter server                       # start the server
-jupyter server  --certfile=mycert.pem # use SSL/TLS certificate
-jupyter server password              # enter a password to protect the server
-"""
+# -----------------------------------------------------------------------------
 
 JUPYTER_SERVICE_HANDLERS = dict(
     auth=None,
@@ -134,29 +129,31 @@ JUPYTER_SERVICE_HANDLERS = dict(
     view=['jupyter_server.view.handlers']
 )
 
-#-----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 # Helper functions
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def random_ports(port, n):
     """Generate a list of n random ports near the given port.
-
     The first 5 ports will be sequential, and the remaining n-5 will be
     randomly selected in the range [port-2*n, port+2*n].
     """
     for i in range(min(5, n)):
         yield port + i
-    for i in range(n-5):
-        yield max(1, port + random.randint(-2*n, 2*n))
+    for i in range(n - 5):
+        yield max(1, port + random.randint(-2 * n, 2 * n))
+
 
 def load_handlers(name):
     """Load the (URL pattern, handler) tuples for each component."""
     mod = __import__(name, fromlist=['default_handlers'])
     return mod.default_handlers
 
-#-----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 # The Tornado web application
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 class ServerWebApplication(web.Application):
 
@@ -211,8 +208,10 @@ class ServerWebApplication(web.Application):
 
         now = utcnow()
 
-        root_dir = contents_manager.root_dir
-        home = py3compat.str_to_unicode(os.path.expanduser('~'), encoding=sys.getfilesystemencoding()) 
+        root_dir = jupyter_app.root_dir
+        if contents_manager:
+            root_dir = contents_manager.root_dir
+        home = py3compat.str_to_unicode(os.path.expanduser('~'), encoding=sys.getfilesystemencoding())
         if root_dir.startswith(home + os.path.sep):
             # collapse $HOME to ~
             root_dir = '~' + root_dir[len(home):]
@@ -225,9 +224,9 @@ class ServerWebApplication(web.Application):
             template_path=template_path,
             static_path=jupyter_app.static_file_path,
             static_custom_path=jupyter_app.static_custom_path,
-            static_handler_class = FileFindHandler,
-            static_url_prefix = url_path_join(base_url, '/static/'),
-            static_handler_args = {
+            static_handler_class=FileFindHandler,
+            static_url_prefix=url_path_join(base_url, '/static/'),
+            static_handler_args={
                 # don't cache custom.js
                 'no_cache_paths': [url_path_join(base_url, 'static', 'custom')],
             },
@@ -307,7 +306,8 @@ class ServerWebApplication(web.Application):
                                 "`extra_services` list.".format(service))
 
         # Add extra handlers from contents manager.
-        handlers.extend(settings['contents_manager'].get_extra_handlers())
+        if settings['contents_manager']:
+            handlers.extend(settings['contents_manager'].get_extra_handlers())
 
         # If gateway mode is enabled, replace appropriate handlers to perform redirection
         if GatewayClient.instance().gateway_enabled:
@@ -323,7 +323,7 @@ class ServerWebApplication(web.Application):
         handlers.append(
             (r"/custom/(.*)", FileFindHandler, {
                 'path': settings['static_custom_path'],
-                'no_cache_paths': ['/'], # don't cache anything in custom
+                'no_cache_paths': ['/'],  # don't cache anything in custom
             })
         )
         # register base handlers last
@@ -333,8 +333,8 @@ class ServerWebApplication(web.Application):
             # set the URL that will be redirected from `/`
             handlers.append(
                 (r'/?', RedirectWithParams, {
-                    'url' : settings['default_url'],
-                    'permanent': False, # want 302, not 301
+                    'url': settings['default_url'],
+                    'permanent': False,  # want 302, not 301
                 })
             )
         else:
@@ -353,7 +353,6 @@ class ServerWebApplication(web.Application):
 
     def last_activity(self):
         """Get a UTC timestamp for when the server last did something.
-
         Includes: API activity, kernel activity, kernel shutdown, and terminal
         activity.
         """
@@ -375,7 +374,6 @@ class ServerWebApplication(web.Application):
 
 class JupyterPasswordApp(JupyterApp):
     """Set a password for the Jupyter server.
-
     Setting a password secures the Jupyter server
     and removes the need for token-based authentication.
     """
@@ -390,15 +388,13 @@ class JupyterPasswordApp(JupyterApp):
         set_password(config_file=self.config_file)
         self.log.info("Wrote hashed password to %s" % self.config_file)
 
+
 def shutdown_server(server_info, timeout=5, log=None):
     """Shutdown a notebook server in a separate process.
-
     *server_info* should be a dictionary as produced by list_running_servers().
-
     Will first try to request shutdown using /api/shutdown .
     On Unix, if the server is still running after *timeout* seconds, it will
     send SIGTERM. After another timeout, it escalates to SIGKILL.
-
     Returns True if the server was stopped by any means, False if stopping it
     failed (on Windows).
     """
@@ -412,7 +408,7 @@ def shutdown_server(server_info, timeout=5, log=None):
     HTTPClient().fetch(req)
 
     # Poll to see if it shut down.
-    for _ in range(timeout*10):
+    for _ in range(timeout * 10):
         if not check_pid(pid):
             if log: log.debug("Server PID %s is gone", pid)
             return True
@@ -437,17 +433,16 @@ def shutdown_server(server_info, timeout=5, log=None):
 
 
 class JupyterServerStopApp(JupyterApp):
-
     version = __version__
-    description="Stop currently running Jupyter server for a given port"
+    description = "Stop currently running Jupyter server for a given port"
 
     port = Integer(8888, config=True,
-        help="Port of the server to be killed. Default 8888")
+                   help="Port of the server to be killed. Default 8888")
 
     def parse_command_line(self, argv=None):
         super(JupyterServerStopApp, self).parse_command_line(argv)
         if self.extra_args:
-            self.port=int(self.extra_args[0])
+            self.port = int(self.extra_args[0])
 
     def shutdown_server(self, server):
         return shutdown_server(server, log=self.log)
@@ -472,23 +467,23 @@ class JupyterServerStopApp(JupyterApp):
 
 class JupyterServerListApp(JupyterApp):
     version = __version__
-    description=_("List currently running notebook servers.")
+    description = _("List currently running notebook servers.")
 
     flags = dict(
         jsonlist=({'JupyterServerListApp': {'jsonlist': True}},
-              _("Produce machine-readable JSON list output.")),
+                  _("Produce machine-readable JSON list output.")),
         json=({'JupyterServerListApp': {'json': True}},
               _("Produce machine-readable JSON object on each line of output.")),
     )
 
     jsonlist = Bool(False, config=True,
-          help=_("If True, the output will be a JSON list of objects, one per "
-                 "active notebook server, each with the details from the "
-                 "relevant server info file."))
+                    help=_("If True, the output will be a JSON list of objects, one per "
+                           "active notebook server, each with the details from the "
+                           "relevant server info file."))
     json = Bool(False, config=True,
-          help=_("If True, each line of output will be a JSON object with the "
-                  "details from the server info file. For a JSON list output, "
-                  "see the JupyterServerListApp.jsonlist configuration value"))
+                help=_("If True, each line of output will be a JSON object with the "
+                       "details from the server info file. For a JSON list output, "
+                       "see the JupyterServerListApp.jsonlist configuration value"))
 
     def start(self):
         serverinfo_list = list(list_running_servers(self.runtime_dir))
@@ -505,89 +500,17 @@ class JupyterServerListApp(JupyterApp):
                     url = url + '?token=%s' % serverinfo['token']
                 print(url, "::", serverinfo['root_dir'])
 
-#-----------------------------------------------------------------------------
-# Aliases and Flags
-#-----------------------------------------------------------------------------
 
-flags = dict(base_flags)
-
-flags['allow-root']=(
-    {'ServerApp' : {'allow_root' : True}},
-    _("Allow the server to be run from root user.")
-)
-flags["no-browser"] = (
-    {"ServerApp": {"open_browser": False}},
-    _("Prevent the opening of the default url in the browser."),
-)
-
-# Add notebook manager flags
-flags.update(boolean_flag('script', 'FileContentsManager.save_script',
-               'DEPRECATED, IGNORED',
-               'DEPRECATED, IGNORED'))
-
-aliases = dict(base_aliases)
-
-aliases.update({
-    'ip': 'ServerApp.ip',
-    'port': 'ServerApp.port',
-    'port-retries': 'ServerApp.port_retries',
-    'transport': 'KernelManager.transport',
-    'keyfile': 'ServerApp.keyfile',
-    'certfile': 'ServerApp.certfile',
-    'client-ca': 'ServerApp.client_ca',
-    'notebook-dir': 'ServerApp.root_dir',
-    'browser': 'ServerApp.browser',
-    'pylab': 'ServerApp.pylab',
-    'gateway-url': 'GatewayClient.url',
-})
-
-#-----------------------------------------------------------------------------
-# ServerApp
-#-----------------------------------------------------------------------------
-
-class ServerApp(JupyterApp):
-
-    name = 'jupyter-server'
-    version = __version__
-    description = _("""The Jupyter Server.
-
-    This launches a Tornado-based Jupyter Server.""")
-    examples = _examples
-    aliases = aliases
-    flags = flags
-
-    classes = [
-        KernelManager, Session, MappingKernelManager, KernelSpecManager,
-        ContentsManager, FileContentsManager, NotebookNotary,
-        GatewayKernelManager, GatewayKernelSpecManager, GatewaySessionManager, GatewayClient,
-    ]
-    flags = Dict(flags)
-    aliases = Dict(aliases)
+# -----------------------------------------------------------------------------
+# BaseServerApp
+# -----------------------------------------------------------------------------
+class BaseServerApp(JupyterApp):
 
     subcommands = dict(
         list=(JupyterServerListApp, JupyterServerListApp.description.splitlines()[0]),
         stop=(JupyterServerStopApp, JupyterServerStopApp.description.splitlines()[0]),
         password=(JupyterPasswordApp, JupyterPasswordApp.description.splitlines()[0]),
         extension=(ServerExtensionApp, ServerExtensionApp.description.splitlines()[0]),
-    )
-
-    # A list of services whose handlers will be exposed.
-    # Subclasses can override this list to
-    # expose a subset of these handlers.
-    default_services = (
-        'api',
-        'auth',
-        'config',
-        'contents',
-        'edit',
-        'files',
-        'kernels',
-        'kernelspecs',
-        'nbconvert',
-        'security',
-        'sessions',
-        'shutdown',
-        'view'
     )
 
     _log_formatter_cls = LogFormatter
@@ -607,47 +530,40 @@ class ServerApp(JupyterApp):
     # Network related information
 
     allow_origin = Unicode('', config=True,
-        help="""Set the Access-Control-Allow-Origin header
-
+                           help="""Set the Access-Control-Allow-Origin header
         Use '*' to allow any origin to access your server.
-
         Takes precedence over allow_origin_pat.
         """
-    )
+                           )
 
     allow_origin_pat = Unicode('', config=True,
-        help="""Use a regular expression for the Access-Control-Allow-Origin header
-
+                               help="""Use a regular expression for the Access-Control-Allow-Origin header
         Requests from an origin matching the expression will get replies with:
-
             Access-Control-Allow-Origin: origin
-
         where `origin` is the origin of the request.
-
         Ignored if allow_origin is set.
         """
-    )
+                               )
 
     allow_credentials = Bool(False, config=True,
-        help=_("Set the Access-Control-Allow-Credentials: true header")
-    )
+                             help=_("Set the Access-Control-Allow-Credentials: true header")
+                             )
 
     allow_root = Bool(False, config=True,
-        help=_("Whether to allow the user to run the server as root.")
-    )
+                      help=_("Whether to allow the user to run the server as root.")
+                      )
 
     default_url = Unicode('/', config=True,
-        help=_("The default URL to redirect to from `/`")
-    )
+                          help=_("The default URL to redirect to from `/`")
+                          )
 
     ip = Unicode('localhost', config=True,
-        help=_("The IP address the Jupyter server will listen on.")
-    )
+                 help=_("The IP address the Jupyter server will listen on.")
+                 )
 
     @default('ip')
     def _default_ip(self):
         """Return localhost if available, 127.0.0.1 otherwise.
-
         On some (horribly broken) systems, localhost cannot be bound.
         """
         s = socket.socket()
@@ -668,55 +584,53 @@ class ServerApp(JupyterApp):
         return value
 
     custom_display_url = Unicode(u'', config=True,
-        help=_("""Override URL shown to users.
-
+                                 help=_("""Override URL shown to users.
         Replace actual URL, including protocol, address, port and base URL,
         with the given value when displaying URL to the users. Do not change
         the actual connection URL. If authentication token is enabled, the
         token is added to the custom URL automatically.
-
         This option is intended to be used when the URL to display to the user
         cannot be determined reliably by the Jupyter server (proxified
         or containerized setups for example).""")
-    )
+                                 )
 
     port = Integer(8888, config=True,
-        help=_("The port the Jupyter server will listen on.")
-    )
+                   help=_("The port the Jupyter server will listen on.")
+                   )
 
     port_retries = Integer(50, config=True,
-        help=_("The number of additional ports to try if the specified port is not available.")
-    )
+                           help=_("The number of additional ports to try if the specified port is not available.")
+                           )
 
     certfile = Unicode(u'', config=True,
-        help=_("""The full path to an SSL/TLS certificate file.""")
-    )
+                       help=_("""The full path to an SSL/TLS certificate file.""")
+                       )
 
     keyfile = Unicode(u'', config=True,
-        help=_("""The full path to a private key file for usage with SSL/TLS.""")
-    )
+                      help=_("""The full path to a private key file for usage with SSL/TLS.""")
+                      )
 
     client_ca = Unicode(u'', config=True,
-        help=_("""The full path to a certificate authority certificate for SSL/TLS client authentication.""")
-    )
+                        help=_(
+                            """The full path to a certificate authority certificate for SSL/TLS client authentication.""")
+                        )
 
     cookie_secret_file = Unicode(config=True,
-        help=_("""The file where the cookie secret is stored.""")
-    )
+                                 help=_("""The file where the cookie secret is stored.""")
+                                 )
 
     @default('cookie_secret_file')
     def _default_cookie_secret_file(self):
         return os.path.join(self.runtime_dir, 'jupytr_cookie_secret')
 
     cookie_secret = Bytes(b'', config=True,
-        help="""The random bytes used to secure cookies.
+                          help="""The random bytes used to secure cookies.
         By default this is a new random number every time you start the server.
         Set it to a value in a config file to enable logins to persist across server sessions.
-
         Note: Cookie secrets should be kept private, do not share config files with
         cookie_secret stored in plaintext (you can read the value from a file).
         """
-    )
+                          )
 
     @default('cookie_secret')
     def _default_cookie_secret(self):
@@ -741,14 +655,12 @@ class ServerApp(JupyterApp):
                            self.cookie_secret_file, e)
 
     token = Unicode('<generated>',
-        help=_("""Token used for authenticating first-time connections to the server.
-
+                    help=_("""Token used for authenticating first-time connections to the server.
         When no password is enabled,
         the default is to generate a new, random token.
-
         Setting to an empty string disables authentication altogether, which is NOT RECOMMENDED.
         """)
-    ).tag(config=True)
+                    ).tag(config=True)
 
     _token_generated = True
 
@@ -766,88 +678,73 @@ class ServerApp(JupyterApp):
             return binascii.hexlify(os.urandom(24)).decode('ascii')
 
     max_body_size = Integer(512 * 1024 * 1024, config=True,
-        help="""
+                            help="""
         Sets the maximum allowed size of the client request body, specified in 
         the Content-Length request header field. If the size in a request 
         exceeds the configured value, a malformed HTTP message is returned to
         the client.
-
         Note: max_body_size is applied even in streaming mode.
         """
-    )
+                            )
 
     max_buffer_size = Integer(512 * 1024 * 1024, config=True,
-        help="""
+                              help="""
         Gets or sets the maximum amount of memory, in bytes, that is allocated 
         for use by the buffer manager.
         """
-    )
+                              )
 
     @observe('token')
     def _token_changed(self, change):
         self._token_generated = False
 
     password = Unicode(u'', config=True,
-                      help="""Hashed password to use for web authentication.
-
+                       help="""Hashed password to use for web authentication.
                       To generate, type in a python/IPython shell:
-
                         from jupyter_server.auth import passwd; passwd()
-
                       The string should be of the form type:salt:hashed-password.
                       """
-    )
+                       )
 
     password_required = Bool(False, config=True,
-                      help="""Forces users to use a password for the Jupyter server.
+                             help="""Forces users to use a password for the Jupyter server.
                       This is useful in a multi user environment, for instance when
                       everybody in the LAN can access each other's machine through ssh.
-
                       In such a case, serving on localhost is not secure since
                       any user can connect to the Jupyter server via ssh.
-
                       """
-    )
+                             )
 
     allow_password_change = Bool(True, config=True,
-                    help="""Allow password to be changed at login for the Jupyter server.
-
+                                 help="""Allow password to be changed at login for the Jupyter server.
                     While loggin in with a token, the Jupyter server UI will give the opportunity to
                     the user to enter a new password at the same time that will replace
                     the token login mechanism.
-
                     This can be set to false to prevent changing password from the UI/API.
                     """
-    )
-
+                                 )
 
     disable_check_xsrf = Bool(False, config=True,
-        help="""Disable cross-site-request-forgery protection
-
+                              help="""Disable cross-site-request-forgery protection
         Jupyter notebook 4.3.1 introduces protection from cross-site request forgeries,
         requiring API requests to either:
-
         - originate from pages served by this server (validated with XSRF cookie and token), or
         - authenticate with a token
-
         Some anonymous compute resources still desire the ability to run code,
         completely without authentication.
         These services can disable all authentication and security checks,
         with the full knowledge of what that implies.
         """
-    )
+                              )
 
     allow_remote_access = Bool(config=True,
-       help="""Allow requests where the Host header doesn't point to a local server
-
+                               help="""Allow requests where the Host header doesn't point to a local server
        By default, requests get a 403 forbidden response if the 'Host' header
        shows that the browser thinks it's on a non-local domain.
        Setting this option to True disables this check.
-
        This protects against 'DNS rebinding' attacks, where a remote web server
        serves you a page and then changes its DNS to send later requests to a
        local IP, bypassing same-origin checks.
-
        Local IP addresses (such as 127.0.0.1 and ::1) are allowed as local,
        along with hostnames configured in local_hostnames.
        """)
@@ -887,12 +784,11 @@ class ServerApp(JupyterApp):
             return not addr.is_loopback
 
     local_hostnames = List(Unicode(), ['localhost'], config=True,
-       help="""Hostnames to allow as local when allow_remote_access is False.
-
+                           help="""Hostnames to allow as local when allow_remote_access is False.
        Local IP addresses (such as 127.0.0.1 and ::1) are automatically accepted
        as local as well.
        """
-    )
+                           )
 
     open_browser = Bool(False, config=True,
                         help="""Whether to open in a browser after starting.
@@ -911,52 +807,48 @@ class ServerApp(JupyterApp):
                       """)
 
     webbrowser_open_new = Integer(2, config=True,
-        help=_("""Specify where to open the server on startup. This is the
+                                  help=_("""Specify where to open the server on startup. This is the
         `new` argument passed to the standard library method `webbrowser.open`.
         The behaviour is not guaranteed, but depends on browser support. Valid
         values are:
-
          - 2 opens a new tab,
          - 1 opens a new window,
          - 0 opens in an existing window.
-
         See the `webbrowser.open` documentation for details.
         """))
 
     tornado_settings = Dict(config=True,
-            help=_("Supply overrides for the tornado.web.Application that the "
-                 "Jupyter server uses."))
+                            help=_("Supply overrides for the tornado.web.Application that the "
+                                   "Jupyter server uses."))
 
     websocket_compression_options = Any(None, config=True,
-        help=_("""
+                                        help=_("""
         Set the tornado compression options for websocket connections.
-
         This value will be returned from :meth:`WebSocketHandler.get_compression_options`.
         None (default) will disable compression.
         A dict (even an empty one) will enable compression.
-
         See the tornado docs for WebSocketHandler.get_compression_options for details.
         """)
-    )
+                                        )
     terminado_settings = Dict(config=True,
-            help=_('Supply overrides for terminado. Currently only supports "shell_command".'))
+                              help=_('Supply overrides for terminado. Currently only supports "shell_command".'))
 
     cookie_options = Dict(config=True,
-        help=_("Extra keyword arguments to pass to `set_secure_cookie`."
-             " See tornado's set_secure_cookie docs for details.")
-    )
+                          help=_("Extra keyword arguments to pass to `set_secure_cookie`."
+                                 " See tornado's set_secure_cookie docs for details.")
+                          )
     get_secure_cookie_kwargs = Dict(config=True,
-        help=_("Extra keyword arguments to pass to `get_secure_cookie`."
-             " See tornado's get_secure_cookie docs for details.")
-    )
+                                    help=_("Extra keyword arguments to pass to `get_secure_cookie`."
+                                           " See tornado's get_secure_cookie docs for details.")
+                                    )
     ssl_options = Dict(
-            allow_none=True,
-            config=True,
-            help=_("""Supply SSL options for the tornado HTTPServer.
+        allow_none=True,
+        config=True,
+        help=_("""Supply SSL options for the tornado HTTPServer.
             See the tornado docs for details."""))
 
     jinja_environment_options = Dict(config=True,
-            help=_("Supply extra arguments that will be passed to Jinja environment."))
+                                     help=_("Supply extra arguments that will be passed to Jinja environment."))
 
     jinja_template_vars = Dict(
         config=True,
@@ -965,7 +857,6 @@ class ServerApp(JupyterApp):
 
     base_url = Unicode('/', config=True,
                        help='''The base URL for the Jupyter server.
-
                        Leading and trailing slashes can be omitted,
                        and will automatically be added.
                        ''')
@@ -980,11 +871,10 @@ class ServerApp(JupyterApp):
         return value
 
     extra_static_paths = List(Unicode(), config=True,
-        help="""Extra paths to search for serving static files.
-
+                              help="""Extra paths to search for serving static files.
         This allows adding javascript/css to be available from the Jupyter server machine,
         or overriding individual files in the IPython"""
-    )
+                              )
 
     @property
     def static_file_path(self):
@@ -992,8 +882,8 @@ class ServerApp(JupyterApp):
         return self.extra_static_paths + [DEFAULT_STATIC_FILES_PATH]
 
     static_custom_path = List(Unicode(),
-        help=_("""Path to search for custom.js, css""")
-    )
+                              help=_("""Path to search for custom.js, css""")
+                              )
 
     @default('static_custom_path')
     def _default_static_custom_path(self):
@@ -1004,10 +894,9 @@ class ServerApp(JupyterApp):
         ]
 
     extra_template_paths = List(Unicode(), config=True,
-        help=_("""Extra paths to search for serving jinja templates.
-
+                                help=_("""Extra paths to search for serving jinja templates.
         Can be used to override templates from jupyter_server.templates.""")
-    )
+                                )
 
     @property
     def template_file_path(self):
@@ -1015,21 +904,21 @@ class ServerApp(JupyterApp):
         return self.extra_template_paths + DEFAULT_TEMPLATE_PATH_LIST
 
     extra_services = List(Unicode(), config=True,
-        help=_("""handlers that should be loaded at higher priority than the default services""")
-    )
+                          help=_("""handlers that should be loaded at higher priority than the default services""")
+                          )
 
     websocket_url = Unicode("", config=True,
-        help="""The base URL for websockets,
+                            help="""The base URL for websockets,
         if it differs from the HTTP server (hint: it almost certainly doesn't).
-
         Should be in the form of an HTTP origin: ws[s]://hostname[:port]
         """
-    )
+                            )
 
+    # FIXME - this shouldn't be something the server deals with
     quit_button = Bool(True, config=True,
-        help="""If True, display a button in the dashboard to quit
+                       help="""If True, display a button in the dashboard to quit
         (shutdown the Jupyter server)."""
-    )
+                       )
 
     contents_manager_class = Type(
         default_value=LargeFileManager,
@@ -1052,7 +941,7 @@ class ServerApp(JupyterApp):
 
     config_manager_class = Type(
         default_value=ConfigManager,
-        config = True,
+        config=True,
         help=_('The config manager class to use')
     )
 
@@ -1064,7 +953,6 @@ class ServerApp(JupyterApp):
         help="""
         The kernel spec manager class to use. Should be a subclass
         of `jupyter_client.kernelspec.KernelSpecManager`.
-
         The Api of KernelSpecManager is provisional and might change
         without warning between this version of Jupyter and the next stable one.
         """
@@ -1084,10 +972,19 @@ class ServerApp(JupyterApp):
         help=_('The logout handler class to use.'),
     )
 
+    # Set manager instances to None so they're defined for subclasses that don't use those
+    # managers.  It will be the subclass's responsibility to create the appropriate instance.
+    config_manager = None
+    contents_manager = None
+    kernel_manager = None
+    kernel_spec_manager = None
+    session_manager = None
+
     trust_xheaders = Bool(False, config=True,
-        help=(_("Whether to trust or not X-Scheme/X-Forwarded-Proto and X-Real-Ip/X-Forwarded-For headers"
-              "sent by the upstream reverse proxy. Necessary if the proxy handles SSL"))
-    )
+                          help=(_(
+                              "Whether to trust or not X-Scheme/X-Forwarded-Proto and X-Real-Ip/X-Forwarded-For headers"
+                              "sent by the upstream reverse proxy. Necessary if the proxy handles SSL"))
+                          )
 
     info_file = Unicode()
 
@@ -1102,12 +999,12 @@ class ServerApp(JupyterApp):
     def _default_browser_open_file(self):
         basename = "jpserver-%s-open.html" % os.getpid()
         return os.path.join(self.runtime_dir, basename)
-    
+
     pylab = Unicode('disabled', config=True,
-        help=_("""
+                    help=_("""
         DISABLED: use %pylab or %matplotlib in the notebook to enable matplotlib.
         """)
-    )
+                    )
 
     @observe('pylab')
     def _update_pylab(self, change):
@@ -1133,8 +1030,8 @@ class ServerApp(JupyterApp):
         self.root_dir = change['new']
 
     root_dir = Unicode(config=True,
-        help=_("The directory to use for notebooks and kernels.")
-    )
+                       help=_("The directory to use for notebooks and kernels.")
+                       )
 
     @default('root_dir')
     def _default_root_dir(self):
@@ -1165,11 +1062,11 @@ class ServerApp(JupyterApp):
         self.server_extensions = change['new']
 
     jpserver_extensions = Dict({}, config=True,
-        help=(_("Dict of Python modules to load as notebook server extensions."
-              "Entry values can be used to enable and disable the loading of"
-              "the extensions. The extensions will be loaded in alphabetical "
-              "order."))
-    )
+                               help=(_("Dict of Python modules to load as notebook server extensions."
+                                       "Entry values can be used to enable and disable the loading of"
+                                       "the extensions. The extensions will be loaded in alphabetical "
+                                       "order."))
+                               )
 
     reraise_server_extension_failures = Bool(
         False,
@@ -1189,80 +1086,48 @@ class ServerApp(JupyterApp):
         check the message and data rate limits."""))
 
     shutdown_no_activity_timeout = Integer(0, config=True,
-        help=("Shut down the server after N seconds with no kernels or "
-              "terminals running and no activity. "
-              "This can be used together with culling idle kernels "
-              "(MappingKernelManager.cull_idle_timeout) to "
-              "shutdown the Jupyter server when it's not in use. This is not "
-              "precisely timed: it may shut down up to a minute later. "
-              "0 (the default) disables this automatic shutdown.")
-    )
+                                           help=("Shut down the server after N seconds with no kernels or "
+                                                 "terminals running and no activity. "
+                                                 "This can be used together with culling idle kernels "
+                                                 "(MappingKernelManager.cull_idle_timeout) to "
+                                                 "shutdown the Jupyter server when it's not in use. This is not "
+                                                 "precisely timed: it may shut down up to a minute later. "
+                                                 "0 (the default) disables this automatic shutdown.")
+                                           )
 
     terminals_enabled = Bool(True, config=True,
-         help=_("""Set to False to disable terminals.
-
+                             help=_("""Set to False to disable terminals.
          This does *not* make the server more secure by itself.
          Anything the user can in a terminal, they can also do in a notebook.
-
          Terminals may also be automatically disabled if the terminado package
          is not available.
          """))
 
+    _configurables = None
+    @property
+    def classes(self):
+        if self._configurables is None:
+            self._configurables = self.get_configurables()
+        return self._configurables
+
+    def get_configurables(self):
+        """ This method must be present and presents the end of the chain of calls from derived classes. """
+        return []
+
     def parse_command_line(self, argv=None):
-
-        super(ServerApp, self).parse_command_line(argv)
-
-        if self.extra_args:
-            arg0 = self.extra_args[0]
-            f = os.path.abspath(arg0)
-            self.argv.remove(arg0)
-            if not os.path.exists(f):
-                self.log.critical(_("No such file or directory: %s"), f)
-                self.exit(1)
-
-            # Use config here, to ensure that it takes higher priority than
-            # anything that comes from the config dirs.
-            c = Config()
-            if os.path.isdir(f):
-                c.ServerApp.root_dir = f
-            elif os.path.isfile(f):
-                c.ServerApp.file_to_run = f
-            self.update_config(c)
+        super(BaseServerApp, self).parse_command_line(argv)
 
     def init_configurables(self):
+        """ Initialize configurable classes by walking the mixins of the deriving subclass... """
+        pass
 
-        # If gateway server is configured, replace appropriate managers to perform redirection.  To make
-        # this determination, instantiate the GatewayClient config singleton.
-        self.gateway_config = GatewayClient.instance(parent=self)
+    def validate_dependencies(self):
+        """ This method must be present and presents the end of the chain of calls from derived classes. """
+        pass
 
-        if self.gateway_config.gateway_enabled:
-            self.kernel_manager_class = 'jupyter_server.gateway.managers.GatewayKernelManager'
-            self.session_manager_class = 'jupyter_server.gateway.managers.GatewaySessionManager'
-            self.kernel_spec_manager_class = 'jupyter_server.gateway.managers.GatewayKernelSpecManager'
-
-        self.kernel_spec_manager = self.kernel_spec_manager_class(
-            parent=self,
-        )
-        self.kernel_manager = self.kernel_manager_class(
-            parent=self,
-            log=self.log,
-            connection_dir=self.runtime_dir,
-            kernel_spec_manager=self.kernel_spec_manager,
-        )
-        self.contents_manager = self.contents_manager_class(
-            parent=self,
-            log=self.log,
-        )
-        self.session_manager = self.session_manager_class(
-            parent=self,
-            log=self.log,
-            kernel_manager=self.kernel_manager,
-            contents_manager=self.contents_manager,
-        )
-        self.config_manager = self.config_manager_class(
-            parent=self,
-            log=self.log,
-        )
+    def get_services(self):
+        """ This method must be present and presents the end of the chain of calls from derived classes. """
+        return []
 
     def init_logging(self):
         # This prevents double log messages because tornado use a root logger that
@@ -1301,7 +1166,7 @@ class ServerApp(JupyterApp):
             sys.exit(1)
 
         self.web_app = ServerWebApplication(
-            self, self.default_services, self.kernel_manager, self.contents_manager,
+            self, self.get_services(), self.kernel_manager, self.contents_manager,
             self.session_manager, self.kernel_spec_manager,
             self.config_manager, self.extra_services,
             self.log, self.base_url, self.default_url, self.tornado_settings,
@@ -1350,10 +1215,10 @@ class ServerApp(JupyterApp):
             token = self.token if self._token_generated else '...'
 
         url = (
-            self.get_url(ip=ip, path=path, token=token)
-            + '\n or '
-            + self.get_url(ip='127.0.0.1', path=path, token=token)
-        )    
+                self.get_url(ip=ip, path=path, token=token)
+                + '\n or '
+                + self.get_url(ip='127.0.0.1', path=path, token=token)
+        )
         return url
 
     @property
@@ -1419,10 +1284,8 @@ class ServerApp(JupyterApp):
 
     def _confirm_exit(self):
         """confirm shutdown on ^C
-
         A second ^C, or answering 'y' within 5s will cause shutdown,
         otherwise original SIGINT handler will be restored.
-
         This doesn't work on Windows.
         """
         info = self.log.info
@@ -1432,7 +1295,7 @@ class ServerApp(JupyterApp):
         no = _('n')
         sys.stdout.write(_("Shutdown this Jupyter server (%s/[%s])? ") % (yes, no))
         sys.stdout.flush()
-        r,w,x = select.select([sys.stdin], [], [], 5)
+        r, w, x = select.select([sys.stdin], [], [], 5)
         if r:
             line = sys.stdin.readline()
             if line.lower().startswith(yes) and no not in line.lower():
@@ -1464,9 +1327,8 @@ class ServerApp(JupyterApp):
 
     def init_server_extension_config(self):
         """Consolidate server extensions specified by all configs.
-
         The resulting list is stored on self.jpserver_extensions and updates config object.
-        
+
         The extension API is experimental, and may change in future releases.
         """
         # Load server extensions with ConfigManager.
@@ -1479,19 +1341,21 @@ class ServerApp(JupyterApp):
             config_path.insert(0, self.config_dir)
         manager = ConfigManager(read_config_path=config_path)
         section = manager.get(self.config_file_name)
-        extensions = section.get('ServerApp', {}).get('jpserver_extensions', {})
+        extensions = section.get(self.__class__.__name__, {}).get('jpserver_extensions', {})
 
         for modulename, enabled in sorted(extensions.items()):
             if modulename not in self.jpserver_extensions:
-                self.config.ServerApp.jpserver_extensions.update({modulename: enabled})
+                self.get_config_instance().jpserver_extensions.update({modulename: enabled})
                 self.jpserver_extensions.update({modulename: enabled})
+
+    def get_config_instance(self):
+        return self.config.BaseServerApp
 
     def init_server_extensions(self):
         """Load any extensions specified by config.
-
         Import the module, then call the load_jupyter_server_extension function,
         if one exists.
-        
+
         The extension API is experimental, and may change in future releases.
         """
         # Initialize extensions
@@ -1505,12 +1369,13 @@ class ServerApp(JupyterApp):
                         # Add debug log for loaded extensions.
                         self.log.debug("%s is enabled and loaded." % modulename)
                     else:
-                        self.log.warning("%s is enabled but no `load_jupyter_server_extension` function was found" % modulename)
+                        self.log.warning(
+                            "%s is enabled but no `load_jupyter_server_extension` function was found" % modulename)
                 except Exception:
                     if self.reraise_server_extension_failures:
                         raise
                     self.log.warning(_("Error loading server extension %s"), modulename,
-                                  exc_info=True)
+                                     exc_info=True)
 
     def init_mime_overrides(self):
         # On some Windows machines, an application has registered incorrect
@@ -1530,7 +1395,7 @@ class ServerApp(JupyterApp):
         """Shutdown server on timeout when there are no kernels or terminals."""
         km = self.kernel_manager
         if len(km) != 0:
-            return   # Kernels still running
+            return  # Kernels still running
 
         try:
             term_mgr = self.web_app.settings['terminal_manager']
@@ -1538,7 +1403,7 @@ class ServerApp(JupyterApp):
             pass  # Terminals not enabled
         else:
             if term_mgr.terminals:
-                return   # Terminals still running
+                return  # Terminals still running
 
         seconds_since_active = \
             (utcnow() - self.web_app.last_activity()).total_seconds()
@@ -1566,27 +1431,27 @@ class ServerApp(JupyterApp):
                 'An HTTPServer instance has not been created for the '
                 'Server Web Application. To create an HTTPServer for this '
                 'application, call `.init_httpserver()`.'
-                )
+            )
 
     def init_httpserver(self):
         """Creates an instance of a Tornado HTTPServer for the Server Web Application
-        and sets the http_server attribute.        
+        and sets the http_server attribute.
         """
         # Check that a web_app has been initialized before starting a server.
         if not hasattr(self, 'web_app'):
             raise AttributeError('A tornado web application has not be initialized. '
                                  'Try calling `.init_webapp()` first.')
-            
+
         # Create an instance of the server.
         self._http_server = httpserver.HTTPServer(
-            self.web_app, 
+            self.web_app,
             ssl_options=self.ssl_options,
             xheaders=self.trust_xheaders,
             max_body_size=self.max_body_size,
             max_buffer_size=self.max_buffer_size
         )
         success = None
-        for port in random_ports(self.port, self.port_retries+1):
+        for port in random_ports(self.port, self.port_retries + 1):
             try:
                 self.http_server.listen(port, self.ip)
             except socket.error as e:
@@ -1604,7 +1469,7 @@ class ServerApp(JupyterApp):
                 break
         if not success:
             self.log.critical(_('ERROR: the Jupyter server could not be started because '
-                              'no available port could be found.'))
+                                'no available port could be found.'))
             self.exit(1)
 
     @staticmethod
@@ -1638,22 +1503,22 @@ class ServerApp(JupyterApp):
     @catch_config_error
     def initialize(self, argv=None, load_extensions=True, new_httpserver=True):
         """Initialize the Server application class, configurables, web application, and http server.
-
         Parameters
         ----------
         argv: list or None
             CLI arguments to parse.
-        
+
         load_extensions: bool
             If True, the server will load server extensions listed in the jpserver_extension trait.
             Otherwise, no server extensions will be loaded.
-        
+
         new_httpserver: bool
             If True, a tornado HTTPServer instance will be created and configured for the Server Web
             Application. This will set the http_server attribute of this class.
         """
         self._init_asyncio_patch()
-        super(ServerApp, self).initialize(argv)
+        self.validate_dependencies()
+        super(BaseServerApp, self).initialize(argv)
         self.init_logging()
         if self._dispatching:
             return
@@ -1673,7 +1538,6 @@ class ServerApp(JupyterApp):
 
     def cleanup_kernels(self):
         """Shutdown all kernels.
-
         The kernels will shutdown themselves when this process no longer exists,
         but explicit shutdown allows the KernelManagers to cleanup the connection files.
         """
@@ -1684,32 +1548,11 @@ class ServerApp(JupyterApp):
 
     def running_server_info(self, kernel_count=True):
         "Return the current working directory and the server url information"
-        info = self.contents_manager.info_string() + "\n"
-        if kernel_count:
-            n_kernels = len(self.kernel_manager.list_kernel_ids())
-            kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
-            info += kernel_msg % n_kernels
-            info += "\n"
-        # Format the info so that the URL fits on a single line in 80 char display
-        info += _("Jupyter Server {version} is running at:\n{url}".
-                  format(version=ServerApp.version, url=self.display_url))
-        if self.gateway_config.gateway_enabled:
-            info += _("\nKernels will be managed by the Gateway server running at:\n%s") % self.gateway_config.url
-        return info
+        raise NotImplementedError()
 
     def server_info(self):
         """Return a JSONable dict of information about this server."""
-        return {'url': self.connection_url,
-                'hostname': self.ip if self.ip else 'localhost',
-                'port': self.port,
-                'secure': bool(self.certfile),
-                'base_url': self.base_url,
-                'token': self.token,
-                'root_dir': os.path.abspath(self.root_dir),
-                'password': bool(self.password),
-                'pid': os.getpid(),
-                'version': ServerApp.version,
-               }
+        raise NotImplementedError()
 
     def write_server_info_file(self):
         """Write the result of server_info() to the JSON file info_file."""
@@ -1722,7 +1565,6 @@ class ServerApp(JupyterApp):
 
     def remove_server_info_file(self):
         """Remove the jpserver-<pid>.json file created for this server.
-
         Ignores the error raised when the file has already been removed.
         """
         try:
@@ -1733,7 +1575,6 @@ class ServerApp(JupyterApp):
 
     def write_browser_open_file(self):
         """Write an nbserver-<pid>-open.html file
-
         This can be used to open the notebook in a browser
         """
         # default_url contains base_url, but so does connection_url
@@ -1753,7 +1594,6 @@ class ServerApp(JupyterApp):
 
     def remove_browser_open_file(self):
         """Remove the nbserver-<pid>-open.html file created for this server.
-
         Ignores the error raised when the file has already been removed.
         """
         try:
@@ -1793,14 +1633,14 @@ class ServerApp(JupyterApp):
         threading.Thread(target=b).start()
 
     def start_app(self):
-        super(ServerApp, self).start()
+        super(BaseServerApp, self).start()
 
         if not self.allow_root:
             # check if we are running as root, and abort if it's not allowed
             try:
                 uid = os.geteuid()
             except AttributeError:
-                uid = -1 # anything nonzero here, since we can't check UID assume non-root
+                uid = -1  # anything nonzero here, since we can't check UID assume non-root
             if uid == 0:
                 self.log.critical(_("Running as root is not recommended. Use --allow-root to bypass."))
                 self.exit(1)
@@ -1808,12 +1648,11 @@ class ServerApp(JupyterApp):
         info = self.log.info
         for line in self.running_server_info(kernel_count=False).split("\n"):
             info(line)
-        info(_("Use Control-C to stop this server and shut down all kernels (twice to skip confirmation)."))
         if 'dev' in jupyter_server.__version__:
             info(_("Welcome to Project Jupyter! Explore the various tools available"
-                 " and their corresponding documentation. If you are interested"
-                 " in contributing to the platform, please visit the community"
-                 "resources section at https://jupyter.org/community.html."))
+                   " and their corresponding documentation. If you are interested"
+                   " in contributing to the platform, please visit the community"
+                   " resources section at https://jupyter.org/community.html."))
 
         self.write_server_info_file()
         self.write_browser_open_file()
@@ -1838,7 +1677,7 @@ class ServerApp(JupyterApp):
         if sys.platform.startswith('win'):
             # add no-op to wake every 5s
             # to handle signals that may be ignored by the inner loop
-            pc = ioloop.PeriodicCallback(lambda : None, 5000)
+            pc = ioloop.PeriodicCallback(lambda: None, 5000)
             pc.start()
         try:
             self.io_loop.start()
@@ -1851,7 +1690,6 @@ class ServerApp(JupyterApp):
 
     def start(self):
         """ Start the Jupyter server app, after initialization
-
         This method takes no arguments so all configuration and initialization
         must be done prior to calling this method."""
         self.start_app()
@@ -1863,12 +1701,259 @@ class ServerApp(JupyterApp):
             if hasattr(self, '_http_server'):
                 self.http_server.stop()
             self.io_loop.stop()
+
         self.io_loop.add_callback(_stop)
+
+# -----------------------------------------------------------------------------
+# Jupyter Server
+# -----------------------------------------------------------------------------
+
+class ServerApp(
+                ApiMixin,
+                AuthMixin,
+                ConfigMixin,
+                ContentsMixin,
+                EditMixin,
+                FilesMixin,
+                KernelsMixin,
+                KernelspecsMixin,
+                NbconvertMixin,
+                SecurityMixin,
+                SessionsMixin,
+                ShutdownMixin,
+                ViewMixin,
+                BaseServerApp):
+
+    name = 'jupyter-server'
+    version = __version__
+    description = _("""The Jupyter Server.
+    This launches a Tornado-based Jupyter Server.""")
+    examples = """
+        jupyter server                       # start the server
+        jupyter server  --certfile=mycert.pem # use SSL/TLS certificate
+        jupyter server password              # enter a password to protect the server
+        """
+
+    # -----------------------------------------------------------------------------
+    # Aliases and Flags
+    # -----------------------------------------------------------------------------
+
+    flags = dict(base_flags)
+
+    flags['allow-root'] = (
+        {'ServerApp': {'allow_root': True}},
+        _("Allow the server to be run from root user.")
+    )
+    flags["no-browser"] = (
+        {"ServerApp": {"open_browser": False}},
+        _("Prevent the opening of the default url in the browser."),
+    )
+
+    # Add notebook manager flags
+    flags.update(boolean_flag('script', 'FileContentsManager.save_script',
+                              'DEPRECATED, IGNORED',
+                              'DEPRECATED, IGNORED'))
+
+    aliases = dict(base_aliases)
+
+    aliases.update({
+        'ip': 'ServerApp.ip',
+        'port': 'ServerApp.port',
+        'port-retries': 'ServerApp.port_retries',
+        'transport': 'KernelManager.transport',
+        'keyfile': 'ServerApp.keyfile',
+        'certfile': 'ServerApp.certfile',
+        'client-ca': 'ServerApp.client_ca',
+        'notebook-dir': 'ServerApp.root_dir',
+        'browser': 'ServerApp.browser',
+        'pylab': 'ServerApp.pylab',
+        'gateway-url': 'GatewayClient.url',
+    })
+
+    def get_configurables(self):
+        """ Walks the set of superclass mixins, collecting the list of configurables. """
+        configurables = [self.__class__]
+        configurables.extend(super(ServerApp, self).get_configurables())
+        return configurables
+
+    # [
+    #     KernelManager, Session, MappingKernelManager, KernelSpecManager,
+    #     ContentsManager, FileContentsManager, NotebookNotary,
+    #     GatewayKernelManager, GatewayKernelSpecManager, GatewaySessionManager, GatewayClient,
+    # ]
+
+    def validate_dependencies(self):
+        """ Walks the set of superclass mixins, asking each to validate their dependencies, where applicable. """
+        super(ServerApp, self).validate_dependencies()
+
+    def get_services(self):
+        """ Walks the set of superclass mixins, collecting the set of services to initialize. """
+        return super(ServerApp, self).get_services()
+
+    def parse_command_line(self, argv=None):
+        super(ServerApp, self).parse_command_line(argv)
+        if self.extra_args:
+            arg0 = self.extra_args[0]
+            f = os.path.abspath(arg0)
+            self.argv.remove(arg0)
+            if not os.path.exists(f):
+                self.log.critical(_("No such file or directory: %s"), f)
+                self.exit(1)
+
+            # Use config here, to ensure that it takes higher priority than
+            # anything that comes from the config dirs.
+            c = Config()
+            if os.path.isdir(f):
+                c.ServerApp.root_dir = f
+            elif os.path.isfile(f):
+                c.ServerApp.file_to_run = f
+            self.update_config(c)
+
+    def init_configurables(self):
+        # If gateway server is configured, replace appropriate managers to perform redirection.  To make
+        # this determination, instantiate the GatewayClient config singleton.
+        # self.gateway_config = GatewayClient.instance(parent=self)
+        #
+        # if self.gateway_config.gateway_enabled:
+        #     self.kernel_manager_class = 'jupyter_server.gateway.managers.GatewayKernelManager'
+        #     self.session_manager_class = 'jupyter_server.gateway.managers.GatewaySessionManager'
+        #     self.kernel_spec_manager_class = 'jupyter_server.gateway.managers.GatewayKernelSpecManager'
+
+        super(ServerApp, self).init_configurables()
+
+    def get_config_instance(self):
+        return self.config.ServerApp
+
+    def running_server_info(self, kernel_count=True):
+        "Return the current working directory and the server url information"
+        info = self.contents_manager.info_string() + "\n"
+        if kernel_count:
+            n_kernels = len(self.kernel_manager.list_kernel_ids())
+            kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
+            info += kernel_msg % n_kernels
+            info += "\n"
+        # Format the info so that the URL fits on a single line in 80 char display
+        info += _("Jupyter Server {version} is running at:\n{url}".
+                  format(version=ServerApp.version, url=self.display_url))
+        if self.gateway_config.gateway_enabled:
+            info += _("\nKernels will be managed by the Gateway server running at:\n%s") % self.gateway_config.url
+        info += "\n"
+        info += _("Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).")
+        return info
+
+    def server_info(self):
+        """Return a JSONable dict of information about this server."""
+        return {'url': self.connection_url,
+                'hostname': self.ip if self.ip else 'localhost',
+                'port': self.port,
+                'secure': bool(self.certfile),
+                'base_url': self.base_url,
+                'token': self.token,
+                'root_dir': os.path.abspath(self.root_dir),
+                'password': bool(self.password),
+                'pid': os.getpid(),
+                'version': ServerApp.version,
+                }
+
+
+# -----------------------------------------------------------------------------
+# Jupyter Kernel Server
+# -----------------------------------------------------------------------------
+
+class KernelServerApp(
+                ApiMixin,
+                AuthMixin,
+                ConfigMixin,
+                KernelspecsMixin,
+                KernelsMixin,
+                SecurityMixin,
+                BaseServerApp):
+
+    name = 'jupyter-kernel-server'
+    version = __version__
+    description = _("""The Jupyter Kernel Server.
+    This launches a Tornado-based Jupyter Kernel Server.""")
+    examples = """
+        jupyter kernel-server                        # start the kernel server
+        jupyter kernel-server  --certfile=mycert.pem # use SSL/TLS certificate
+        jupyter kernel-server password               # enter a password to protect the kernel server
+        """
+
+    # -----------------------------------------------------------------------------
+    # Aliases and Flags
+    # -----------------------------------------------------------------------------
+
+    flags = dict(base_flags)
+
+    flags['allow-root'] = (
+        {'KernelServerApp': {'allow_root': True}},
+        _("Allow the server to be run from root user.")
+    )
+    flags["no-browser"] = (
+        {"KernelServerApp": {"open_browser": False}},
+        _("Prevent the opening of the default url in the browser."),
+    )
+
+    aliases = dict(base_aliases)
+
+    aliases.update({
+        'ip': 'KernelServerApp.ip',
+        'port': 'KernelServerApp.port',
+        'port-retries': 'KernelServerApp.port_retries',
+        'transport': 'KernelManager.transport',
+        'keyfile': 'KernelServerApp.keyfile',
+        'certfile': 'KernelServerApp.certfile',
+        'client-ca': 'KernelServerApp.client_ca',
+        'browser': 'KernelServerApp.browser',
+        'pylab': 'KernelServerApp.pylab',
+    })
+
+    def get_configurables(self):
+        configurables = [self.__class__]
+        configurables.extend(super(KernelServerApp, self).get_configurables())
+        return configurables
+
+    def parse_command_line(self, argv=None):
+        super(KernelServerApp, self).parse_command_line(argv)
+
+    def init_configurables(self):
+        super(KernelServerApp, self).init_configurables()
+
+    def get_config_instance(self):
+        return self.config.KernelServerApp
+
+    def running_server_info(self, kernel_count=True):
+        "Return the current working directory and the server url information"
+        info = ""
+        if kernel_count:
+            n_kernels = len(self.kernel_manager.list_kernel_ids())
+            kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
+            info += kernel_msg % n_kernels
+            info += "\n"
+        # Format the info so that the URL fits on a single line in 80 char display
+        info += _("Jupyter Kernel Server {version} is running at:\n{url}".
+                  format(version=KernelServerApp.version, url=self.display_url))
+        info += "\n"
+        info += _("Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).")
+        return info
+
+    def server_info(self):
+        """Return a JSONable dict of information about this server."""
+        return {'url': self.connection_url,
+                'hostname': self.ip if self.ip else 'localhost',
+                'port': self.port,
+                'secure': bool(self.certfile),
+                'base_url': self.base_url,
+                'token': self.token,
+                'root_dir': os.path.abspath(self.root_dir),
+                'password': bool(self.password),
+                'pid': os.getpid(),
+                'version': KernelServerApp.version,
+                }
 
 
 def list_running_servers(runtime_dir=None):
     """Iterate over the server info files of running notebook servers.
-
     Given a runtime directory, find jpserver-* files in the security directory,
     and yield dicts of their information, each one pertaining to
     a currently running notebook server instance.
@@ -1895,8 +1980,11 @@ def list_running_servers(runtime_dir=None):
                     os.unlink(os.path.join(runtime_dir, file_name))
                 except OSError:
                     pass  # TODO: This should warn or log or something
-#-----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
 # Main entry point
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 main = launch_new_instance = ServerApp.launch_instance
+ks_main = KernelServerApp.launch_instance
