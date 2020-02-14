@@ -10,6 +10,8 @@ from tornado.escape import url_escape
 from jupyter_server.utils import url_path_join
 from ...utils import expected_http_error
 
+from ipython_genutils.py3compat import PY3
+NATIVE_KERNEL_NAME = 'python3' if PY3 else 'python2'
 
 @pytest.fixture
 def ws_fetch(auth_header, http_port):
@@ -135,6 +137,18 @@ async def test_main_kernel_handler(fetch):
     restarted_kernel = json.loads(r.body.decode())
     assert restarted_kernel['id'] == kernel2['id']
     assert restarted_kernel['name'] == kernel2['name']
+
+    # Start a kernel with a path
+    r = await fetch(
+        'api', 'kernels',
+        method='POST',
+                body=json.dumps({
+            'name': NATIVE_KERNEL_NAME,
+            'path': '/foo'
+        })
+    )
+    kernel3 = json.loads(r.body.decode())
+    assert isinstance(kernel3, dict)
 
 
 async def test_kernel_handler(fetch):
