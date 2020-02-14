@@ -10,6 +10,7 @@ from tornado.escape import url_escape
 from jupyter_server.utils import url_path_join
 from ...utils import expected_http_error
 
+
 @pytest.fixture
 def ws_fetch(auth_header, http_port):
     """fetch fixture that handles auth, base_url, and path"""
