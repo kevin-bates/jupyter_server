@@ -10,9 +10,6 @@ from tornado.escape import url_escape
 from jupyter_server.utils import url_path_join
 from ...utils import expected_http_error
 
-from ipython_genutils.py3compat import PY3
-NATIVE_KERNEL_NAME = 'python3' if PY3 else 'python2'
-
 @pytest.fixture
 def ws_fetch(auth_header, http_port):
     """fetch fixture that handles auth, base_url, and path"""
@@ -143,7 +140,7 @@ async def test_main_kernel_handler(fetch):
         'api', 'kernels',
         method='POST',
                 body=json.dumps({
-            'name': NATIVE_KERNEL_NAME,
+            'name': 'pyimport/kernel',
             'path': '/foo'
         })
     )
