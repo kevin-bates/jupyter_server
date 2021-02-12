@@ -13,7 +13,7 @@ def jp_argv(request):
     return ["--ServerApp.kernel_manager_class=jupyter_server.services.kernels.kernelmanager." + request.param]
 
 
-CULL_TIMEOUT = 10 if platform.python_implementation() == 'PyPy' else 5
+CULL_TIMEOUT = 15 if platform.python_implementation() == 'PyPy' else 5
 CULL_INTERVAL = 1
 
 
