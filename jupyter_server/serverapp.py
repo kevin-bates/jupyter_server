@@ -1429,6 +1429,27 @@ class ServerApp(JupyterApp):
         help="""If True, display controls to shut down the Jupyter server, such as menu items or buttons.""",
     )
 
+    prefer_fast_validation = Bool(
+        False,
+        config=True,
+        help="""Determines if fast notebook validation can be performed and
+                        uses that approach if available. Default is to use
+                        the default validation.
+                        """,
+    )
+    @validate("prefer_fast_validation")
+    def _validate_prefer_fast_validation(self, proposal):
+        value = proposal["value"]
+        if value:  # Determine if fast validation can be performed
+            try:
+                import fastjsonschema
+                os.environ['NBFORMAT_VALIDATOR'] = 'fastjsonschema'
+            except ImportError:
+                self.log.warning("Fast notebook validation cannot be used at this time.  "
+                                 "Install 'fastjsonschema' to enable faster validation.")
+                value = False
+        return value
+
     # REMOVE in VERSION 2.0
     # Temporarily allow content managers to inherit from the 'notebook'
     # package. We will deprecate this in the next major release.
