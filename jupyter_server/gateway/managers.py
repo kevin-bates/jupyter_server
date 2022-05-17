@@ -41,9 +41,12 @@ class GatewayMappingKernelManager(AsyncMappingKernelManager):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.kernels_url = url_path_join(
-            GatewayClient.instance().url, GatewayClient.instance().kernels_endpoint
-        )
+        gw_client = GatewayClient.instance()
+        kernels_url = url_path_join(gw_client.url, gw_client.kernels_endpoint)
+        if gw_client.tenant_id:
+            kernels_url = f"{kernels_url}?tenant_id={gw_client.tenant_id}"
+        self.log.debug(f"Using url: '{kernels_url}'...")
+        self.kernels_url = kernels_url
 
     def remove_kernel(self, kernel_id):
         """Complete override since we want to be more tolerant of missing keys"""

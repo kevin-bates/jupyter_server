@@ -2,6 +2,7 @@
 # Distributed under the terms of the Modified BSD License.
 import json
 import os
+import uuid
 from socket import gaierror
 
 from tornado import web
@@ -269,6 +270,24 @@ class GatewayClient(SingletonConfigurable):
             not in ["no", "false"]
         )
 
+    tenant_id_env = "JUPYTER_GATEWAY_TENANT_ID"
+    tenant_id = Unicode(
+        allow_none=True,
+        default_value=None,
+        config=True,
+        help="""The ID (typically a UUID) representing this tenant within a Gateway server.  Applies
+         only to Enterprise Gateway. (JUPYTER_GATEWAY_TENANT_ID env var)""",
+    )
+
+    auto_generate_tenant_id_env = "JUPYTER_GATEWAY_AUTO_GENERATE_TENANT_ID"
+    auto_generate_tenant_id = Bool(
+        default_value=False,
+        config=True,
+        help="""When 'True', the tenant ID will be automatically generated (UUID string).  If tenant_id
+         is configured, the configured value will be used and this trailet will be ignored. Applies
+         only to Enterprise Gateway. (JUPYTER_GATEWAY_AUTO_GENERATE_TENANT_ID env var)""",
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._static_args = {}  # initialized on first use
@@ -353,6 +372,13 @@ class GatewayClient(SingletonConfigurable):
         perform this operation once.
 
         """
+        # Determine tenant_id, if any.
+        print(
+            f"++++++++++++++++ self.tenant_id={self.tenant_id}, self.auto_generate_tenant_id={self.auto_generate_tenant_id}"
+        )
+        if self.tenant_id is None and self.auto_generate_tenant_id:
+            self.tenant_id = str(uuid.uuid4())
+
         # Ensure that request timeout and KERNEL_LAUNCH_TIMEOUT are the same, taking the
         #  greater value of the two.
         if self.request_timeout < float(GatewayClient.KERNEL_LAUNCH_TIMEOUT):
