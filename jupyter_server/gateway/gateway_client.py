@@ -4,11 +4,16 @@ import json
 import os
 import uuid
 from socket import gaierror
+from typing import Optional
 
+from packaging.version import Version
 from tornado import web
+from tornado.escape import json_decode
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from traitlets import Bool, Float, Int, TraitError, Unicode, default, validate
 from traitlets.config import SingletonConfigurable
+
+from ..utils import run_sync, url_path_join
 
 
 class GatewayClient(SingletonConfigurable):
@@ -272,25 +277,19 @@ class GatewayClient(SingletonConfigurable):
 
     tenant_id_env = "JUPYTER_GATEWAY_TENANT_ID"
     tenant_id = Unicode(
-        allow_none=True,
-        default_value=None,
         config=True,
-        help="""The ID (typically a UUID) representing this tenant within a Gateway server.  Applies
-         only to Enterprise Gateway. (JUPYTER_GATEWAY_TENANT_ID env var)""",
+        help="""The ID (UUID-formatted string) representing this tenant within an Enterprise Gateway server.
+         Applies only to Enterprise Gateway versions 3.0 or higher. If not configured, a tenant_id will be generated.
+         (JUPYTER_GATEWAY_TENANT_ID env var)""",
     )
 
-    auto_generate_tenant_id_env = "JUPYTER_GATEWAY_AUTO_GENERATE_TENANT_ID"
-    auto_generate_tenant_id = Bool(
-        default_value=False,
-        config=True,
-        help="""When 'True', the tenant ID will be automatically generated (UUID string).  If tenant_id
-         is configured, the configured value will be used and this trailet will be ignored. Applies
-         only to Enterprise Gateway. (JUPYTER_GATEWAY_AUTO_GENERATE_TENANT_ID env var)""",
-    )
+    @default("tenant_id")
+    def tenant_id_default(self):
+        return os.environ.get(self.tenant_id_env, str(uuid.uuid4()))
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._static_args = {}  # initialized on first use
+    tenant_id_min_version = Version(
+        "3.0.0"
+    )  # Used to determine if tenant_id is supported by Gateway
 
     env_whitelist_default_value = ""
     env_whitelist_env = "JUPYTER_GATEWAY_ENV_WHITELIST"
@@ -367,18 +366,16 @@ class GatewayClient(SingletonConfigurable):
     # Ensure KERNEL_LAUNCH_TIMEOUT has a default value.
     KERNEL_LAUNCH_TIMEOUT = int(os.environ.get("KERNEL_LAUNCH_TIMEOUT", 40))
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._static_args: dict = {}  # initialized on first use
+        self._add_tenant_id: Optional[bool] = None
+
     def init_static_args(self):
         """Initialize arguments used on every request.  Since these are static values, we'll
         perform this operation once.
 
         """
-        # Determine tenant_id, if any.
-        print(
-            f"++++++++++++++++ self.tenant_id={self.tenant_id}, self.auto_generate_tenant_id={self.auto_generate_tenant_id}"
-        )
-        if self.tenant_id is None and self.auto_generate_tenant_id:
-            self.tenant_id = str(uuid.uuid4())
-
         # Ensure that request timeout and KERNEL_LAUNCH_TIMEOUT are the same, taking the
         #  greater value of the two.
         if self.request_timeout < float(GatewayClient.KERNEL_LAUNCH_TIMEOUT):
@@ -416,6 +413,19 @@ class GatewayClient(SingletonConfigurable):
 
         kwargs.update(self._static_args)
         return kwargs
+
+    async def add_tenant_id(self):
+        if self._add_tenant_id is None:
+            api_endpoint = url_path_join(self.url, "/api")
+            response = await gateway_request(api_endpoint)
+            if response.code == 200:
+                version_info = json_decode(response.body)
+                gateway_version = version_info.get("gateway_version", "0.0.0")
+                self._add_tenant_id = (
+                    Version(gateway_version).major >= self.tenant_id_min_version.major
+                )
+
+        return self._add_tenant_id
 
 
 async def gateway_request(endpoint, **kwargs):

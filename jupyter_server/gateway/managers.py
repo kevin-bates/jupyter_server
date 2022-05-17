@@ -41,12 +41,9 @@ class GatewayMappingKernelManager(AsyncMappingKernelManager):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        gw_client = GatewayClient.instance()
-        kernels_url = url_path_join(gw_client.url, gw_client.kernels_endpoint)
-        if gw_client.tenant_id:
-            kernels_url = f"{kernels_url}?tenant_id={gw_client.tenant_id}"
-        self.log.debug(f"Using url: '{kernels_url}'...")
-        self.kernels_url = kernels_url
+        self.kernels_url = url_path_join(
+            GatewayClient.instance().url, GatewayClient.instance().kernels_endpoint
+        )
 
     def remove_kernel(self, kernel_id):
         """Complete override since we want to be more tolerant of missing keys"""
@@ -106,8 +103,14 @@ class GatewayMappingKernelManager(AsyncMappingKernelManager):
         We'll use this opportunity to refresh the models in each of
         the kernels we're managing.
         """
-        self.log.debug(f"Request list kernels: {self.kernels_url}")
-        response = await gateway_request(self.kernels_url, method="GET")
+        list_url = self.kernels_url
+        gw_client = GatewayClient.instance()
+        add_tenant_id = await gw_client.add_tenant_id()
+        if add_tenant_id:
+            list_url = f"{list_url}?tenant_id={url_escape(gw_client.tenant_id)}"
+
+        self.log.debug(f"Request list kernels: {list_url}")
+        response = await gateway_request(list_url, method="GET")
         kernels = json_decode(response.body)
         # Refresh our models to those we know about, and filter
         # the return value with only our kernels.
@@ -413,17 +416,19 @@ class GatewayKernelManager(AsyncKernelManager):
         kernel_id = kwargs.get("kernel_id")
 
         if kernel_id is None:
+            gw_client = GatewayClient.instance()
+
             kernel_name = kwargs.get("kernel_name", "python3")
             self.log.debug("Request new kernel at: %s" % self.kernels_url)
 
             # Let KERNEL_USERNAME take precedent over http_user config option.
-            if os.environ.get("KERNEL_USERNAME") is None and GatewayClient.instance().http_user:
-                os.environ["KERNEL_USERNAME"] = GatewayClient.instance().http_user
+            if os.environ.get("KERNEL_USERNAME") is None and gw_client.http_user:
+                os.environ["KERNEL_USERNAME"] = gw_client.http_user
 
             kernel_env = {
                 k: v
                 for (k, v) in dict(os.environ).items()
-                if k.startswith("KERNEL_") or k in GatewayClient.instance().env_whitelist.split(",")
+                if k.startswith("KERNEL_") or k in gw_client.env_whitelist.split(",")
             }
 
             # Add any env entries in this request
@@ -433,7 +438,11 @@ class GatewayKernelManager(AsyncKernelManager):
             if kwargs.get("cwd") is not None and kernel_env.get("KERNEL_WORKING_DIR") is None:
                 kernel_env["KERNEL_WORKING_DIR"] = kwargs["cwd"]
 
-            json_body = json_encode({"name": kernel_name, "env": kernel_env})
+            dict_body = {"name": kernel_name, "env": kernel_env}
+            add_tenant_id = await gw_client.add_tenant_id()
+            if add_tenant_id:
+                dict_body["tenant_id"] = gw_client.tenant_id
+            json_body = json_encode(dict_body)
 
             response = await gateway_request(self.kernels_url, method="POST", body=json_body)
             self.kernel = json_decode(response.body)
