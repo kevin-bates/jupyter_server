@@ -13,7 +13,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError
 from traitlets import Bool, Float, Int, TraitError, Unicode, default, validate
 from traitlets.config import SingletonConfigurable
 
-from ..utils import run_sync, url_path_join
+from ..utils import url_path_join
 
 
 class GatewayClient(SingletonConfigurable):
@@ -284,6 +284,10 @@ class GatewayClient(SingletonConfigurable):
          Applies only to Enterprise Gateway versions 3.0 or higher. (JUPYTER_GATEWAY_TENANT_ID env var)""",
     )
 
+    @default("tenant_id")
+    def _tenant_id_default(self):
+        return os.environ.get(self.tenant_id_env)
+
     @validate("tenant_id")
     def _validate_tenant_id(self, proposal):
         value = proposal["value"]
@@ -422,14 +426,13 @@ class GatewayClient(SingletonConfigurable):
         kwargs.update(self._static_args)
         return kwargs
 
-    async def add_tenant_id(self):
-        """Checks the configured value for tenan_id and, if set, the version of the
+    async def add_tenant_id(self) -> Optional[bool]:
+        """Checks the configured value for tenant_id and, if set, the version of the
         Gateway Server to determine if it supports tenant IDs.
         """
         if self._add_tenant_id is None:
-            if self.tenant_id is None:
-                self._add_tenant_id = False
-            else:  # Only check version if tenant_id is configured
+            self._add_tenant_id = False
+            if self.tenant_id is not None:  # Only check version if tenant_id is configured
                 api_endpoint = url_path_join(self.url, "/api")
                 response = await gateway_request(api_endpoint)
                 if response.code == 200:
