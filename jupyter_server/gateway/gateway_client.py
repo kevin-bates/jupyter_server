@@ -277,15 +277,23 @@ class GatewayClient(SingletonConfigurable):
 
     tenant_id_env = "JUPYTER_GATEWAY_TENANT_ID"
     tenant_id = Unicode(
+        allow_none=True,
+        default_value=None,
         config=True,
         help="""The ID (UUID-formatted string) representing this tenant within an Enterprise Gateway server.
-         Applies only to Enterprise Gateway versions 3.0 or higher. If not configured, a tenant_id will be generated.
-         (JUPYTER_GATEWAY_TENANT_ID env var)""",
+         Applies only to Enterprise Gateway versions 3.0 or higher. (JUPYTER_GATEWAY_TENANT_ID env var)""",
     )
 
-    @default("tenant_id")
-    def tenant_id_default(self):
-        return os.environ.get(self.tenant_id_env, str(uuid.uuid4()))
+    @validate("tenant_id")
+    def _validate_tenant_id(self, proposal):
+        value = proposal["value"]
+        # Ensure value, if present, is in uuid format
+        if value is not None:
+            try:
+                uuid.UUID(value)
+            except ValueError:
+                raise TraitError(f"GatewayClient tenant_id must be in UUID format, was: '{value}'")
+        return value
 
     tenant_id_min_version = Version(
         "3.0.0"
@@ -415,15 +423,26 @@ class GatewayClient(SingletonConfigurable):
         return kwargs
 
     async def add_tenant_id(self):
+        """Checks the configured value for tenan_id and, if set, the version of the
+        Gateway Server to determine if it supports tenant IDs.
+        """
         if self._add_tenant_id is None:
-            api_endpoint = url_path_join(self.url, "/api")
-            response = await gateway_request(api_endpoint)
-            if response.code == 200:
-                version_info = json_decode(response.body)
-                gateway_version = version_info.get("gateway_version", "0.0.0")
-                self._add_tenant_id = (
-                    Version(gateway_version).major >= self.tenant_id_min_version.major
-                )
+            if self.tenant_id is None:
+                self._add_tenant_id = False
+            else:  # Only check version if tenant_id is configured
+                api_endpoint = url_path_join(self.url, "/api")
+                response = await gateway_request(api_endpoint)
+                if response.code == 200:
+                    version_info = json_decode(response.body)
+                    gateway_version = version_info.get("gateway_version", "0.0.0")
+                    self._add_tenant_id = (
+                        Version(gateway_version).major >= self.tenant_id_min_version.major
+                    )
+                    if not self._add_tenant_id:
+                        self.log.info(
+                            "Tenant tracking is only available in Enterprise Gateway versions 3 "
+                            "and higher.  GatewayClient.tenant_id will be ignored."
+                        )
 
         return self._add_tenant_id
 
