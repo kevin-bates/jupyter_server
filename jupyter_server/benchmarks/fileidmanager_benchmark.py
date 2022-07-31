@@ -1,5 +1,7 @@
 import os
+import sqlite3
 import timeit
+import uuid
 
 from jupyter_core.paths import jupyter_data_dir
 
@@ -19,9 +21,9 @@ def build_setup(n, insert=True):
         if not insert:
             return
 
-        for i in range(n):
+        for j in range(n):
             fid_manager.con.execute(
-                "INSERT INTO Files (path) VALUES (?)", (f"abracadabra/{i}.txt",)
+                "INSERT INTO Files (id, path) VALUES (new_uuid(), ?)", (f"abracadabra/{j}.txt",)
             )
         fid_manager.con.commit()
 
@@ -39,22 +41,32 @@ def build_test_index(n, single_transaction, batched=False):
             if batched:
                 for batch_start in range(0, n, BATCH_SIZE):
                     batch_end = batch_start + BATCH_SIZE
-                    fid_manager.con.execute(
-                        "INSERT INTO FILES (path) VALUES "
-                        + ",".join(
-                            [f'("abracadabra/{i}.txt")' for i in range(batch_start, batch_end)]
+                    try:
+                        fid_manager.con.execute(
+                            "INSERT INTO FILES (id, path) VALUES "
+                            + ",".join(
+                                [
+                                    f'(new_uuid(), "abracadabra/{j}.txt")'
+                                    for j in range(batch_start, batch_end)
+                                ]
+                            )
                         )
-                    )
+                    except sqlite3.IntegrityError as duplicate:
+                        raise duplicate
             else:
-                for i in range(n):
+                for j in range(n):
                     fid_manager.con.execute(
-                        "INSERT INTO Files (path) VALUES (?)", (f"abracadabra/{i}.txt",)
+                        "INSERT INTO Files (id, path) VALUES (?, ?)",
+                        (
+                            uuid.uuid4().hex,
+                            f"abracadabra/{j}.txt",
+                        ),
                     )
 
             fid_manager.con.commit()
         else:
-            for i in range(n):
-                fid_manager.index(f"abracadabra/{i}.txt")
+            for j in range(n):
+                fid_manager.index(f"abracadabra/{j}.txt")
 
     return test_index
 
@@ -107,18 +119,19 @@ for i in [100, 1_000, 10_000, 100_000, 1_000_000]:
 # suggested by https://stackoverflow.com/a/72527058/12548458
 # asymptotically faster because it reduces work being done by the SQLite VDBE https://www.sqlite.org/opcode.html
 # weird constant time factor that makes it sub-optimal for <1M records.
-print("Index benchmark (single transaction, batched INSERTs)")
-for i in [100, 1_000, 10_000, 100_000, 1_000_000]:
-    print(
-        row_template.format(
-            i,
-            timeit.timeit(
-                build_test_index(i, single_transaction=True, batched=True),
-                build_setup(i, insert=False),
-                number=1,
-            ),
+if True:  # Skipped since multi-column bulk inserts require different statement syntax
+    print("Index benchmark (single transaction, batched INSERTs)")
+    for i in [100, 1_000, 10_000, 100_000, 1_000_000]:
+        print(
+            row_template.format(
+                i,
+                timeit.timeit(
+                    build_test_index(i, single_transaction=True, batched=True),
+                    build_setup(i, insert=False),
+                    number=1,
+                ),
+            )
         )
-    )
 
 print("Recursive move benchmark")
 for i in [100, 1_000, 10_000, 100_000, 1_000_000]:

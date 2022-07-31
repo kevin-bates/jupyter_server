@@ -1,4 +1,5 @@
 import os
+import uuid
 
 
 def test_index(fid_manager):
@@ -25,7 +26,7 @@ def test_getters_indexed(fid_manager):
 
 def test_getters_unindexed(fid_manager):
     path = os.path.join("path", "to", "file")
-    id = 1
+    id = str(uuid.uuid4())
 
     assert fid_manager.get_id(path) == None
     assert fid_manager.get_path(id) == None
@@ -49,7 +50,7 @@ def test_move_unindexed(fid_manager):
     id = fid_manager.move(old_path, new_path)
 
     assert fid_manager.get_id(old_path) is None
-    assert fid_manager.get_id(new_path) is id
+    assert fid_manager.get_id(new_path) == id
     assert fid_manager.get_path(id) == new_path
 
 
@@ -62,7 +63,7 @@ def test_move_indexed(fid_manager):
 
     assert old_id == new_id
     assert fid_manager.get_id(old_path) is None
-    assert fid_manager.get_id(new_path) is new_id
+    assert fid_manager.get_id(new_path) == new_id
     assert fid_manager.get_path(old_id) == new_path
 
 
