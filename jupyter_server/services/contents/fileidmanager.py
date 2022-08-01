@@ -46,15 +46,15 @@ class FileIdManager(LoggingConfigurable):
         the file is already indexed, the file ID is immediately returned."""
         path = self._normalize_path(path)
 
+        existing_id = self.get_id(path)
+        if existing_id is not None:
+            return existing_id
+
         fid_str = self._index(path)
         self.con.commit()
         return fid_str
 
     def _index(self, path: str) -> str:
-
-        existing_id = self.get_id(path)
-        if existing_id is not None:
-            return existing_id
 
         fid = uuid.uuid4()
         self._insert(
@@ -96,7 +96,6 @@ class FileIdManager(LoggingConfigurable):
         the file path has not yet been indexed."""
         path = self._normalize_path(path)
         row = self.con.execute("SELECT id FROM Files WHERE path = ?", (path,)).fetchone()
-        self.con.commit()
         return str(uuid.UUID(row[0])) if row else None
 
     def get_path(self, fid: str) -> Optional[str]:
@@ -105,7 +104,6 @@ class FileIdManager(LoggingConfigurable):
         row = self.con.execute(
             "SELECT path FROM Files WHERE id = ?", (uuid.UUID(fid).hex,)
         ).fetchone()
-        self.con.commit()
         return row[0] if row else None
 
     def move(self, old_path, new_path, recursive=False):
@@ -158,7 +156,7 @@ class FileIdManager(LoggingConfigurable):
                 (to_path, len(from_path) + 1, from_path_glob),
             )
 
-        self._index(from_path)
+        self.index(from_path)
         ret = self._index(to_path)
         self.con.commit()
         return ret

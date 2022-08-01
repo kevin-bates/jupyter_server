@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import timeit
-import uuid
 
 from jupyter_core.paths import jupyter_data_dir
 
@@ -56,11 +55,8 @@ def build_test_index(n, single_transaction, batched=False):
             else:
                 for j in range(n):
                     fid_manager.con.execute(
-                        "INSERT INTO Files (id, path) VALUES (?, ?)",
-                        (
-                            uuid.uuid4().hex,
-                            f"abracadabra/{j}.txt",
-                        ),
+                        "INSERT INTO Files (id, path) VALUES (new_uuid(), ?)",
+                        (f"abracadabra/{j}.txt",),
                     )
 
             fid_manager.con.commit()
