@@ -7,7 +7,9 @@ import os
 import shutil
 import stat
 import sys
+import warnings
 from datetime import datetime
+from posixpath import isabs
 
 import nbformat
 from anyio.to_thread import run_sync
@@ -17,7 +19,7 @@ from tornado import web
 from traitlets import Bool, TraitError, Unicode, default, validate
 
 from jupyter_server import _tz as tz
-from jupyter_server.base.handlers import AuthenticatedFileHandler
+from jupyter_server.base.handlers import AuthenticatedFileHandler, HTTPError
 from jupyter_server.transutils import _i18n
 
 from .filecheckpoints import AsyncFileCheckpoints, FileCheckpoints
@@ -54,6 +56,40 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
         if not os.path.isdir(value):
             raise TraitError("%r is not a directory" % value)
         return value
+
+    @default("preferred_dir")
+    def _default_preferred_dir(self):
+        try:
+            value = self.parent.preferred_dir
+        except AttributeError:
+            pass
+        else:
+            if value is not None:
+                warnings.warn(
+                    "ServerApp.preferred_dir config is deprecated in jupyter-server 2.0. Use ContentsManager.preferred_dir with a relative path instead",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                # For transitioning to relative path, we check if it is a valid relative path:
+                try:
+                    if not os.path.isabs(value) and self.dir_exists(value):
+                        return value
+                except HTTPError:
+                    pass
+                value = self.parent._normalize_dir(value)
+                if not os.path.isdir(value):
+                    raise TraitError(_i18n("No such directory: '%r'") % value)
+                if not (value + os.path.sep).startswith(self.root_dir):
+                    raise TraitError("%s is outside root contents directory" % value)
+                return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
+        return "/"
+
+    @validate("preferred_dir")
+    def _validate_preferred_dir(self, proposal):
+        try:
+            super()._validate_preferred_dir(proposal)
+        except HTTPError as e:
+            raise TraitError(e.log_message) from e
 
     @default("checkpoints_class")
     def _checkpoints_class_default(self):

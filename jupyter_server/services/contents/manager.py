@@ -75,10 +75,26 @@ class ContentsManager(LoggingConfigurable):
 
     root_dir = Unicode("/", config=True)
 
+    preferred_dir = Unicode(
+        "/",
+        config=True,
+        help=_i18n(
+            "Preferred starting directory to use for notebooks as a path local to `root_dir`."
+        ),
+    )
+
+    @validate("preferred_dir")
+    def _validate_preferred_dir(self, proposal):
+        value = proposal["value"]
+        if not self.dir_exists(value):
+            raise TraitError(_i18n("No such directory: '%r'") % value)
+        return value
+
     allow_hidden = Bool(False, config=True, help="Allow access to hidden files")
 
     notary = Instance(sign.NotebookNotary)
 
+    @default("notary")
     def _notary_default(self):
         return sign.NotebookNotary(parent=self)
 
