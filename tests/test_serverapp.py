@@ -406,4 +406,4 @@ def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_se
     if os.name == "nt":
         assert "is not a relative API path" in str(error)
     else:
-        assert "is outside root contents directory" in str(error)
+        assert "No such directory" in str(error)

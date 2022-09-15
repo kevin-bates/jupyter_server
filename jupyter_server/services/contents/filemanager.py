@@ -78,7 +78,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                     pass
                 value = self.parent._normalize_dir(value)
                 if not os.path.isdir(value):
-                    raise TraitError(_i18n("No such directory: '%r'") % value)
+                    raise TraitError(_i18n("No such directory: %r") % value)
                 if not (value + os.path.sep).startswith(self.root_dir):
                     raise TraitError("%s is outside root contents directory" % value)
                 return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
