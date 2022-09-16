@@ -421,7 +421,7 @@ async def test_gateway_session_lifecycle(init_gateway, jp_root_dir, jp_fetch):
     # Validate session lifecycle functions; create and delete.
 
     # create
-    session_id, kernel_id = await create_session(jp_root_dir, jp_fetch, "kspec_foo")
+    session_id, kernel_id = await create_session(jp_fetch, "kspec_foo")
 
     # ensure kernel still considered running
     assert await is_kernel_running(jp_fetch, kernel_id) is True
@@ -567,12 +567,12 @@ async def test_channel_queue_get_msg_when_response_router_had_finished():
 #
 # Test methods below...
 #
-async def create_session(root_dir, jp_fetch, kernel_name):
+async def create_session(jp_fetch, kernel_name):
     """Creates a session for a kernel.  The session is created against the server
     which then uses the gateway for kernel management.
     """
     with mocked_gateway:
-        nb_path = root_dir / "testgw.ipynb"
+        nb_path = "/testgw.ipynb"
         body = json.dumps(
             {"path": str(nb_path), "type": "notebook", "kernel": {"name": kernel_name}}
         )
