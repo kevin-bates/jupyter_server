@@ -9,7 +9,6 @@ import stat
 import sys
 import warnings
 from datetime import datetime
-from posixpath import isabs
 
 import nbformat
 from anyio.to_thread import run_sync
