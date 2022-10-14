@@ -70,15 +70,8 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                     DeprecationWarning,
                     stacklevel=3,
                 )
-                # For transitioning to relative path, we check if it is a valid relative path:
-                try:
-                    if not os.path.isabs(value) and self.dir_exists(value):
-                        return value
-                except HTTPError:
-                    pass
-                value = self.parent._normalize_dir(value)
                 if not os.path.isdir(value):
-                    raise TraitError(_i18n("No such directory: %r") % value)
+                    raise TraitError(_i18n("No such preferred dir: %r") % value)
                 if not (value + os.path.sep).startswith(self.root_dir):
                     raise TraitError("%s is outside root contents directory" % value)
                 return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
@@ -87,7 +80,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
     @validate("preferred_dir")
     def _validate_preferred_dir(self, proposal):
         try:
-            super()._validate_preferred_dir(proposal)
+            return super()._validate_preferred_dir(proposal)
         except HTTPError as e:
             raise TraitError(e.log_message) from e
 
