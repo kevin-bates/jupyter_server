@@ -70,8 +70,6 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                     DeprecationWarning,
                     stacklevel=3,
                 )
-                if not os.path.isdir(value):
-                    raise TraitError(_i18n("No such preferred dir: %r") % value)
                 if not (value + os.path.sep).startswith(self.root_dir):
                     raise TraitError("%s is outside root contents directory" % value)
                 return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
