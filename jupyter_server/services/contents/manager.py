@@ -87,7 +87,7 @@ class ContentsManager(LoggingConfigurable):
     def _validate_preferred_dir(self, proposal):
         value = proposal["value"]
         if not self.dir_exists(value):
-            raise TraitError(_i18n("No such directory: '%r'") % value)
+            raise TraitError(_i18n("Preferred directory not found: %r") % value)
         return value
 
     allow_hidden = Bool(False, config=True, help="Allow access to hidden files")
