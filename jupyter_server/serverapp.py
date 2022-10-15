@@ -1836,6 +1836,9 @@ class ServerApp(JupyterApp):
             parent=self,
             log=self.log,
         )
+        # Trigger a default/validation here explicitly while we still supporte
+        # deprecated trait on ServerApp (FIXME remove when deprecation finalized)
+        self.contents_manager.preferred_dir
         self.session_manager = self.session_manager_class(
             parent=self,
             log=self.log,
