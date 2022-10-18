@@ -74,13 +74,6 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                 return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
         return "/"
 
-    @validate("preferred_dir")
-    def _validate_preferred_dir(self, proposal):
-        try:
-            return super()._validate_preferred_dir(proposal)
-        except HTTPError as e:
-            raise TraitError(e.log_message) from e
-
     @default("checkpoints_class")
     def _checkpoints_class_default(self):
         return FileCheckpoints
