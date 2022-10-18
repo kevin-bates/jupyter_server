@@ -66,7 +66,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
             if value is not None:
                 warnings.warn(
                     "ServerApp.preferred_dir config is deprecated in jupyter-server 2.0. Use ContentsManager.preferred_dir with a relative path instead",
-                    DeprecationWarning,
+                    FutureWarning,
                     stacklevel=3,
                 )
                 if not (value + os.path.sep).startswith(self.root_dir):
