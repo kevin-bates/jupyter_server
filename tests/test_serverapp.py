@@ -256,6 +256,7 @@ def test_urls(config, public_url, local_url, connection_url):
 
 # Preferred dir tests
 # ----------------------------------------------------------------------------
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_valid_preferred_dir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path)
     app = jp_configurable_serverapp(root_dir=path, preferred_dir=path)
@@ -264,6 +265,7 @@ def test_valid_preferred_dir(tmp_path, jp_configurable_serverapp):
     assert app.root_dir == app.preferred_dir
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_valid_preferred_dir_is_root_subdir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path)
     path_subdir = str(tmp_path / "subdir")
@@ -284,7 +286,7 @@ def test_valid_preferred_dir_does_not_exist(tmp_path, jp_configurable_serverapp)
 
 
 # This tests some deprecated behavior as well
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 @pytest.mark.parametrize(
     "root_dir_loc,preferred_dir_loc",
     [
@@ -335,9 +337,8 @@ def test_preferred_dir_validation(
         kwargs["argv"] = argv  # type:ignore
 
     if root_dir_loc == "default" and preferred_dir_loc != "default":  # error expected
-        app = jp_configurable_serverapp(**kwargs)
-        with pytest.raises(TraitError):
-            app.contents_manager.preferred_dir
+        with pytest.raises(SystemExit):
+            jp_configurable_serverapp(**kwargs)
     else:
         app = jp_configurable_serverapp(**kwargs)
         assert app.root_dir == expected_root_dir
@@ -368,18 +369,14 @@ def test_invalid_preferred_dir_does_not_exist_set(tmp_path, jp_configurable_serv
     assert "No such preferred dir:" in str(error)
 
 
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_invalid_preferred_dir_not_root_subdir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path / "subdir")
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
-    with pytest.raises(TraitError) as error:
-        app = jp_configurable_serverapp(root_dir=path, preferred_dir=not_subdir_path)
-        # reading the value triggers default generator:
-        app.contents_manager.preferred_dir
-
-    assert "is outside root contents directory" in str(error)
+    with pytest.raises(SystemExit):
+        jp_configurable_serverapp(root_dir=path, preferred_dir=not_subdir_path)
 
 
 def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
@@ -399,8 +396,8 @@ def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_se
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
-    app = jp_configurable_serverapp(root_dir=path)
     with pytest.raises(TraitError) as error:
+        app = jp_configurable_serverapp(root_dir=path)
         app.contents_manager.preferred_dir = not_subdir_path
 
     if os.name == "nt":
