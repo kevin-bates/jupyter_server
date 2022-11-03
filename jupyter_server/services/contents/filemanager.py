@@ -18,7 +18,7 @@ from tornado import web
 from traitlets import Bool, TraitError, Unicode, default, validate
 
 from jupyter_server import _tz as tz
-from jupyter_server.base.handlers import AuthenticatedFileHandler, HTTPError
+from jupyter_server.base.handlers import AuthenticatedFileHandler
 from jupyter_server.transutils import _i18n
 
 from .filecheckpoints import AsyncFileCheckpoints, FileCheckpoints
