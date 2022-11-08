@@ -386,8 +386,8 @@ async def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurab
     not_subdir_path = os.path.relpath(tmp_path, path)
 
     app = jp_configurable_serverapp(root_dir=path)
+    app.contents_manager.preferred_dir = not_subdir_path
     with pytest.raises(HTTPError) as error:
-        app.contents_manager.preferred_dir = not_subdir_path
         await app.contents_manager.dir_exists(app.contents_manager.preferred_dir)
 
     assert "is outside root contents directory" in str(error.value)
@@ -398,9 +398,10 @@ async def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configura
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
+    app = jp_configurable_serverapp(root_dir=path)
+    app.contents_manager.preferred_dir = not_subdir_path
     with pytest.raises(HTTPError) as error:
-        app = jp_configurable_serverapp(root_dir=path)
-        app.contents_manager.preferred_dir = not_subdir_path
+        print(app.contents_manager.preferred_dir)
         await app.contents_manager.dir_exists(app.contents_manager.preferred_dir)
 
     if os.name == "nt":
