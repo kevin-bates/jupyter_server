@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from jupyter_core.application import NoStart
+from tornado.web import HTTPError
 from traitlets import TraitError
 from traitlets.tests.utils import check_help_all_output
 
@@ -379,28 +380,30 @@ def test_invalid_preferred_dir_not_root_subdir(tmp_path, jp_configurable_servera
         jp_configurable_serverapp(root_dir=path, preferred_dir=not_subdir_path)
 
 
-def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
+async def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path / "subdir")
     os.makedirs(path, exist_ok=True)
     not_subdir_path = os.path.relpath(tmp_path, path)
 
     app = jp_configurable_serverapp(root_dir=path)
-    with pytest.raises(TraitError) as error:
+    with pytest.raises(HTTPError) as error:
         app.contents_manager.preferred_dir = not_subdir_path
+        await app.contents_manager.dir_exists(app.contents_manager.preferred_dir)
 
-    assert "is outside root contents directory" in str(error)
+    assert "is outside root contents directory" in str(error.value)
 
 
-def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
+async def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path / "subdir")
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
-    with pytest.raises(TraitError) as error:
+    with pytest.raises(HTTPError) as error:
         app = jp_configurable_serverapp(root_dir=path)
         app.contents_manager.preferred_dir = not_subdir_path
+        await app.contents_manager.dir_exists(app.contents_manager.preferred_dir)
 
     if os.name == "nt":
-        assert "is not a relative API path" in str(error)
+        assert "is not a relative API path" in str(error.value)
     else:
-        assert "Preferred directory not found" in str(error)
+        assert "Preferred directory not found" in str(error.value)

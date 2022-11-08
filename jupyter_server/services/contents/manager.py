@@ -83,17 +83,6 @@ class ContentsManager(LoggingConfigurable):
         ),
     )
 
-    @validate("preferred_dir")
-    def _validate_preferred_dir(self, proposal):
-        value = proposal["value"]
-        try:
-            dir_exists = self.dir_exists(value)
-        except HTTPError as e:
-            raise TraitError(e.log_message) from e
-        if not dir_exists:
-            raise TraitError(_i18n("Preferred directory not found: %r") % value)
-        return value
-
     allow_hidden = Bool(False, config=True, help="Allow access to hidden files")
 
     notary = Instance(sign.NotebookNotary)
