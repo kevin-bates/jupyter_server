@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from jupyter_core.application import NoStart
+from tornado.web import HTTPError
 from traitlets import TraitError
 from traitlets.tests.utils import check_help_all_output
 
@@ -256,6 +257,7 @@ def test_urls(config, public_url, local_url, connection_url):
 
 # Preferred dir tests
 # ----------------------------------------------------------------------------
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_valid_preferred_dir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path)
     app = jp_configurable_serverapp(root_dir=path, preferred_dir=path)
@@ -264,6 +266,7 @@ def test_valid_preferred_dir(tmp_path, jp_configurable_serverapp):
     assert app.root_dir == app.preferred_dir
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_valid_preferred_dir_is_root_subdir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path)
     path_subdir = str(tmp_path / "subdir")
@@ -283,6 +286,8 @@ def test_valid_preferred_dir_does_not_exist(tmp_path, jp_configurable_serverapp)
     assert "No such preferred dir:" in str(error)
 
 
+# This tests some deprecated behavior as well
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 @pytest.mark.parametrize(
     "root_dir_loc,preferred_dir_loc",
     [
@@ -338,8 +343,11 @@ def test_preferred_dir_validation(
     else:
         app = jp_configurable_serverapp(**kwargs)
         assert app.root_dir == expected_root_dir
-        assert app.preferred_dir == expected_preferred_dir
-        assert app.preferred_dir.startswith(app.root_dir)
+        rel = os.path.relpath(expected_preferred_dir, expected_root_dir)
+        if rel == ".":
+            rel = "/"
+        assert app.contents_manager.preferred_dir == rel
+        assert ".." not in rel
 
 
 def test_invalid_preferred_dir_does_not_exist(tmp_path, jp_configurable_serverapp):
@@ -362,42 +370,35 @@ def test_invalid_preferred_dir_does_not_exist_set(tmp_path, jp_configurable_serv
     assert "No such preferred dir:" in str(error)
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_invalid_preferred_dir_not_root_subdir(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path / "subdir")
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
+    with pytest.raises(SystemExit):
+        jp_configurable_serverapp(root_dir=path, preferred_dir=not_subdir_path)
+
+
+async def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
+    path = str(tmp_path / "subdir")
+    os.makedirs(path, exist_ok=True)
+    not_subdir_path = os.path.relpath(tmp_path, path)
+
+    app = jp_configurable_serverapp(root_dir=path)
     with pytest.raises(TraitError) as error:
-        app = jp_configurable_serverapp(root_dir=path, preferred_dir=not_subdir_path)
+        app.contents_manager.preferred_dir = not_subdir_path
 
-    assert "preferred_dir must be equal or a subdir of root_dir. " in str(error)
+    assert "is outside root contents directory" in str(error.value)
 
 
-def test_invalid_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
+async def test_absolute_preferred_dir_not_root_subdir_set(tmp_path, jp_configurable_serverapp):
     path = str(tmp_path / "subdir")
     os.makedirs(path, exist_ok=True)
     not_subdir_path = str(tmp_path)
 
     app = jp_configurable_serverapp(root_dir=path)
     with pytest.raises(TraitError) as error:
-        app.preferred_dir = not_subdir_path
+        app.contents_manager.preferred_dir = not_subdir_path
 
-    assert "preferred_dir must be equal or a subdir of root_dir. " in str(error)
-
-
-def test_observed_root_dir_updates_preferred_dir(tmp_path, jp_configurable_serverapp):
-    path = str(tmp_path)
-    new_path = str(tmp_path / "subdir")
-    os.makedirs(new_path, exist_ok=True)
-
-    app = jp_configurable_serverapp(root_dir=path, preferred_dir=path)
-    app.root_dir = new_path
-    assert app.preferred_dir == new_path
-
-
-def test_observed_root_dir_does_not_update_preferred_dir(tmp_path, jp_configurable_serverapp):
-    path = str(tmp_path)
-    new_path = str(tmp_path.parent)
-    app = jp_configurable_serverapp(root_dir=path, preferred_dir=path)
-    app.root_dir = new_path
-    assert app.preferred_dir == path
+    assert "is outside root contents directory" in str(error.value)
