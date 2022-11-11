@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 from jupyter_core.application import NoStart
-from tornado.web import HTTPError
 from traitlets import TraitError
 from traitlets.tests.utils import check_help_all_output
 
