@@ -83,14 +83,6 @@ class ContentsManager(LoggingConfigurable):
         ),
     )
 
-    @validate("preferred_dir")
-    def _validate_preferred_dir(self, proposal):
-        value = proposal["value"]
-
-        if not value.startswith(self.root_dir):
-            raise TraitError(_i18n(f"{value} is outside root contents directory"))
-        return value
-
     allow_hidden = Bool(False, config=True, help="Allow access to hidden files")
 
     notary = Instance(sign.NotebookNotary)
