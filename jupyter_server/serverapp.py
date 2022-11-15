@@ -510,7 +510,6 @@ def shutdown_server(server_info, timeout=5, log=None):
 
     url = server_info["url"]
     pid = server_info["pid"]
-
     try:
         shutdown_url = urljoin(url, "api/shutdown")
         if log:
@@ -2254,7 +2253,7 @@ class ServerApp(JupyterApp):
         if len(km) != 0:
             return  # Kernels still running
 
-        if self.extension_manager.any_activity:
+        if self.extension_manager.any_activity():
             return
 
         seconds_since_active = (utcnow() - self.web_app.last_activity()).total_seconds()
@@ -2848,7 +2847,11 @@ def list_running_servers(runtime_dir=None, log=None):
     for file_name in os.listdir(runtime_dir):
         if re.match("jpserver-(.+).json", file_name):
             with open(os.path.join(runtime_dir, file_name), encoding="utf-8") as f:
-                info = json.load(f)
+                # Handle race condition where file is being written.
+                try:
+                    info = json.load(f)
+                except json.JSONDecodeError:
+                    continue
 
             # Simple check whether that process is really still running
             # Also remove leftover files from IPython 2.x without a pid field
