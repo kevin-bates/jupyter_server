@@ -76,12 +76,20 @@ class ContentsManager(LoggingConfigurable):
     root_dir = Unicode("/", config=True)
 
     preferred_dir = Unicode(
-        "/",
+        ".",
         config=True,
         help=_i18n(
-            "Preferred starting directory to use for notebooks as a path local to `root_dir`."
+            "Preferred starting directory to use for notebooks as a path relative to `root_dir`."
         ),
     )
+
+    @validate("preferred_dir")
+    def _validate_preferred_dir(self, proposal):
+        """Do a bit of validation of the preferred_dir."""
+        value = proposal["value"]
+        if value == ".":  # If the value is the default, use this to convert to root_dir
+            value = self.root_dir
+        return value
 
     allow_hidden = Bool(False, config=True, help="Allow access to hidden files")
 

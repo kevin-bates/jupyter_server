@@ -65,14 +65,33 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
         else:
             if value is not None:
                 warnings.warn(
-                    "ServerApp.preferred_dir config is deprecated in jupyter-server 2.0. Use ContentsManager.preferred_dir with a relative path instead",
+                    "ServerApp.preferred_dir config is deprecated in jupyter-server 2.0. Use "
+                    "ContentsManager.preferred_dir with a relative path instead",
                     FutureWarning,
                     stacklevel=3,
                 )
                 if not (value + os.path.sep).startswith(self.root_dir):
                     raise TraitError("%s is outside root contents directory" % value)
                 return os.path.relpath(value, self.root_dir).replace(os.path.sep, "/")
-        return "/"
+        return "."
+
+    @validate("preferred_dir")
+    def _validate_preferred_dir(self, proposal):
+        """Do a bit of validation of the preferred_dir."""
+        value = proposal["value"]
+        if os.path.isabs(value):
+            # If we receive an absolute path, make it relative to root_dir.  If it doesn't
+            # start with root_dir, raise an exception since it's relative path will be
+            # invalid anyway.
+            if not value.startswith(self.root_dir):
+                raise TraitError(
+                    f"The preferred_dir ({value}) must be a subdirectory of root_dir ({self.root_dir})"
+                )
+            value = os.path.relpath(value, self.root_dir)
+        value = os.path.join(self.root_dir, value)
+        if not os.path.isdir(value):
+            raise TraitError(f"The preferred_dir ({value}) is not a directory")
+        return value
 
     @default("checkpoints_class")
     def _checkpoints_class_default(self):
